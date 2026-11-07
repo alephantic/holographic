@@ -1,36 +1,45 @@
 import { Hono } from "hono";
 import { streamText } from "hono/streaming";
+import { MAX_CHARS_PER_REQUEST, MAX_CHARS_PER_TURN, MAX_TURNS } from "../shared/limits.js";
 import { ACCESS_HEADER, type ChatEvent, type ChatRequest, type ChatTurn, type StatusResponse } from "../shared/protocol.js";
 import { accessGranted, accessKeyRequired } from "./access.js";
 import { selectProvider } from "./providers.js";
-
-// Per-request caps. They bound what one call can cost; they are not access control.
-const MAX_TURNS = 24;
-const MAX_CHARS_PER_TURN = 8_000;
-const MAX_CHARS_PER_REQUEST = 32_000;
 
 const SYSTEM_PROMPT =
   "You are the conversational side of Holographic, a composition studio for writing, design, music, " +
   "and research. Be a thoughtful collaborator: clear, concrete, and unhurried. Prefer plain prose; " +
   "use lists only when they genuinely help. Match the length of your reply to the question.";
 
-function validate(body: unknown): ChatTurn[] | null {
-  if (!body || typeof body !== "object") return null;
+type Validated = { turns: ChatTurn[] } | { error: string };
+
+/** Checks the request shape and the shared limits, naming the problem so the interface can show it. */
+function validate(body: unknown): Validated {
+  if (!body || typeof body !== "object") return { error: "The request wasn't understood." };
   const { messages } = body as Partial<ChatRequest>;
-  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_TURNS) return null;
+  if (!Array.isArray(messages) || messages.length === 0) return { error: "The request had no messages." };
+  if (messages.length > MAX_TURNS) {
+    return { error: `Too many messages in one request (${messages.length}; the limit is ${MAX_TURNS}).` };
+  }
   const turns: ChatTurn[] = [];
   let total = 0;
   for (const turn of messages) {
-    if (!turn || typeof turn !== "object") return null;
+    if (!turn || typeof turn !== "object") return { error: "The request wasn't understood." };
     const { role, content } = turn as Partial<ChatTurn>;
-    if (role !== "user" && role !== "assistant") return null;
-    if (typeof content !== "string" || content.trim() === "" || content.length > MAX_CHARS_PER_TURN) return null;
+    if (role !== "user" && role !== "assistant") return { error: "The request wasn't understood." };
+    if (typeof content !== "string" || content.trim() === "") return { error: "A message was empty." };
+    if (content.length > MAX_CHARS_PER_TURN) {
+      return { error: `A message is too long (${content.length.toLocaleString()} characters; the limit is ${MAX_CHARS_PER_TURN.toLocaleString()}).` };
+    }
     total += content.length;
-    if (total > MAX_CHARS_PER_REQUEST) return null;
+    if (total > MAX_CHARS_PER_REQUEST) {
+      return { error: `The conversation sent is too long (over ${MAX_CHARS_PER_REQUEST.toLocaleString()} characters in one request).` };
+    }
     turns.push({ role, content });
   }
-  if (turns[0]?.role !== "user" || turns[turns.length - 1]?.role !== "user") return null;
-  return turns;
+  if (turns[0]?.role !== "user" || turns[turns.length - 1]?.role !== "user") {
+    return { error: "The request must start and end with your message." };
+  }
+  return { turns };
 }
 
 export const chatApp = new Hono();
@@ -66,11 +75,12 @@ chatApp.post("/chat", async (c) => {
     return c.json(event, 503);
   }
 
-  const turns = validate(await c.req.json().catch(() => null));
-  if (!turns) {
-    const event: ChatEvent = { type: "error", code: "bad_request", message: "Malformed chat request." };
+  const validated = validate(await c.req.json().catch(() => null));
+  if ("error" in validated) {
+    const event: ChatEvent = { type: "error", code: "bad_request", message: validated.error };
     return c.json(event, 400);
   }
+  const { turns } = validated;
 
   return streamText(c, async (stream) => {
     const send = async (event: ChatEvent) => {

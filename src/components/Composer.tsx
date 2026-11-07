@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { MAX_CHARS_PER_TURN } from "../../shared/limits";
 import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModeSelect, type Mode } from "./ModeSelect";
 
@@ -20,7 +21,11 @@ const PLACEHOLDER: Record<Mode, string> = {
 export function Composer({ mode, onModeChange, onSubmit, busy, onStop, autoFocus }: Props) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const canSubmit = text.trim().length > 0 && !busy;
+  // Chat messages are capped by what one request can carry; saved thoughts are not.
+  const limit = mode === "chat" ? MAX_CHARS_PER_TURN : null;
+  const overLimit = limit !== null && text.length > limit;
+  const showCount = limit !== null && text.length > limit * 0.8;
+  const canSubmit = text.trim().length > 0 && !busy && !overLimit;
 
   const fit = useCallback(() => {
     const el = textareaRef.current;
@@ -74,6 +79,12 @@ export function Composer({ mode, onModeChange, onSubmit, busy, onStop, autoFocus
       />
       <div className="composer-row">
         <ModeSelect value={mode} onChange={onModeChange} />
+        {showCount && (
+          <span className={`composer-count${overLimit ? " composer-count-over" : ""}`} role="status">
+            {text.length.toLocaleString()} / {limit!.toLocaleString()}
+            {overLimit && <span className="visually-hidden">. Too long to send; shorten it or send it in parts.</span>}
+          </span>
+        )}
         {busy ? (
           <button key="stop" type="button" className="composer-send" onClick={onStop} aria-label="Stop generating">
             <StopIcon size={16} />

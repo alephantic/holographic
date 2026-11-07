@@ -6,6 +6,8 @@ import { MenuIcon, ComposeIcon } from "./components/icons";
 import type { Mode } from "./components/ModeSelect";
 import { SavedView } from "./components/SavedView";
 import { Sidebar } from "./components/Sidebar";
+import { Transfer } from "./components/Transfer";
+import { selectContext } from "./lib/context";
 import { fetchStatus, streamChat, type ApiStatus } from "./lib/api";
 import { SAMPLE_ENTRIES } from "./lib/samples";
 import {
@@ -135,9 +137,12 @@ export function App() {
 
     let reply = "";
     let failure: { code: string; message: string } | null = null;
+    // Only a bounded window of recent messages goes to the model; the whole chat stays stored.
+    const context = selectContext(chat.messages);
     try {
+      if (!context) throw new RangeError("too long");
       failure = await streamChat(
-        chat.messages.map((m) => ({ role: m.role, content: m.content })),
+        context.turns,
         (chunk) => {
           reply += chunk;
           setPending((p) => (p && p.chatId === chat.id ? { ...p, text: reply } : p));
@@ -149,7 +154,9 @@ export function App() {
       failure =
         error instanceof DOMException && error.name === "AbortError"
           ? { code: "aborted", message: reply ? "Stopped here." : "Stopped before a reply arrived." }
-          : { code: "client", message: "Something went wrong while reading the reply." };
+          : error instanceof RangeError
+            ? { code: "too_long", message: "This message is too long to send. Shorten it or send it in parts." }
+            : { code: "client", message: "Something went wrong while reading the reply." };
     }
 
     if (abortRef.current === controller) abortRef.current = null;
@@ -215,6 +222,7 @@ export function App() {
         onSelect={openEntry}
         onNew={startNew}
         onClose={() => setDrawerOpen(false)}
+        footer={<Transfer library={library} onImport={setLibrary} />}
       />
 
       <main className="main" inert={drawerOpen}>
@@ -235,6 +243,7 @@ export function App() {
                 <ChatView
                   entry={activeEntry}
                   pending={pending?.chatId === activeEntry.id ? pending.text : null}
+                  contextStart={activeEntry.sample ? 0 : (selectContext(activeEntry.messages)?.startIndex ?? 0)}
                   onDelete={deleteEntry}
                 />
               ) : (

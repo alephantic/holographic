@@ -308,6 +308,46 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.sidebar-footer {
+  flex: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.transfer-actions {
+  display: flex;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.transfer-text {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+
+.transfer-text strong {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.transfer-error {
+  color: var(--danger);
+}
+
+.transfer-panel {
+  padding-top: 2px;
+}
+
+.text-button-primary {
+  color: var(--fg);
+  font-weight: 500;
+}
+
 .sidebar-backdrop {
   display: none;
 }
@@ -481,6 +521,18 @@ button:disabled {
   text-align: left;
 }
 
+.context-divider {
+  margin: 0 0 22px;
+  padding: 6px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--fg-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
 .thinking-dot {
   display: inline-block;
   width: 10px;
@@ -492,7 +544,19 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thinking-dot {
+  .context-divider {
+  margin: 0 0 22px;
+  padding: 6px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--fg-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
+.thinking-dot {
     animation: none;
     opacity: 0.6;
   }
@@ -546,6 +610,18 @@ button:disabled {
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
+}
+
+.composer-count {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+
+.composer-count-over {
+  color: var(--danger);
 }
 
 .composer-send {

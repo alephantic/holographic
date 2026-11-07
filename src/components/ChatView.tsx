@@ -6,10 +6,12 @@ interface Props {
   entry: ChatEntry;
   /** Partial assistant reply while streaming, or null. */
   pending: string | null;
+  /** Index of the first message that will be sent with the next reply; earlier ones are kept but not sent. */
+  contextStart: number;
   onDelete: (id: string) => void;
 }
 
-export function ChatView({ entry, pending, onDelete }: Props) {
+export function ChatView({ entry, pending, contextStart, onDelete }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const lastMessageId = entry.messages[entry.messages.length - 1]?.id;
 
@@ -22,8 +24,13 @@ export function ChatView({ entry, pending, onDelete }: Props) {
     <div className="column chat" aria-label={`Chat: ${entry.title}`}>
       <EntryHeader entry={entry} onDelete={onDelete} />
       <ol className="messages" aria-live="polite" aria-relevant="additions text">
-        {entry.messages.map((m) => (
+        {entry.messages.map((m, i) => (
           <li key={m.id} className={`message message-${m.role}`}>
+            {i === contextStart && i > 0 && (
+              <p className="context-divider" role="note">
+                Earlier messages are kept here but aren't sent with new replies.
+              </p>
+            )}
             <div className="message-body">{m.content}</div>
             {m.note && <p className="message-note">{m.note}</p>}
           </li>

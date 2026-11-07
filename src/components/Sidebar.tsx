@@ -1,5 +1,6 @@
 import type { Entry } from "../lib/types";
 import { BookmarkIcon, ChatIcon, CloseIcon, ComposeIcon } from "./icons";
+import type { ReactNode } from "react";
 
 interface Props {
   entries: Entry[];
@@ -8,9 +9,11 @@ interface Props {
   onSelect: (id: string) => void;
   onNew: () => void;
   onClose: () => void;
+  /** Export / import controls, rendered at the foot of the sidebar. */
+  footer?: ReactNode;
 }
 
-export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose }: Props) {
+export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose, footer }: Props) {
   return (
     <nav className="sidebar" aria-label="Sidebar">
       <div className="sidebar-top">
@@ -54,6 +57,7 @@ export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose }
           </section>
         )}
       </div>
+      {footer && <div className="sidebar-footer">{footer}</div>}
     </nav>
   );
 }
