@@ -1,0 +1,41 @@
+{
+  "name": "holographic",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Holographic \u2014 a Composition Studio. First build: one interface, two ways to begin (Chat or Save).",
+  "license": "MIT",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c blue,magenta \"vite\" \"npm:dev:server\"",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@hono/node-server": "^2.1.6",
+    "hono": "^4.13.16",
+    "openai": "^7.53.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,95 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUpIcon, StopIcon } from "./icons";
+import { ModeSelect, type Mode } from "./ModeSelect";
+
+interface Props {
+  mode: Mode;
+  onModeChange: (mode: Mode) => void;
+  onSubmit: (text: string) => void;
+  /** True while a chat reply is streaming; the submit button becomes Stop. */
+  busy: boolean;
+  onStop: () => void;
+  autoFocus?: boolean;
+}
+
+const PLACEHOLDER: Record<Mode, string> = {
+  chat: "Message Holographic",
+  save: "Write a thought to keep",
+};
+
+export function Composer({ mode, onModeChange, onSubmit, busy, onStop, autoFocus }: Props) {
+  const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const canSubmit = text.trim().length > 0 && !busy;
+
+  const fit = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  }, []);
+
+  useLayoutEffect(fit, [text, fit]);
+
+  useEffect(() => {
+    // Only grab focus where a keyboard is likely present; on touch devices this
+    // would pop the keyboard before the person has chosen what to do.
+    if (autoFocus && window.matchMedia("(pointer: fine)").matches) textareaRef.current?.focus();
+  }, [autoFocus]);
+
+  const submit = () => {
+    if (!canSubmit) return;
+    onSubmit(text.trim());
+    setText("");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  return (
+    <form
+      className="composer"
+      aria-label={mode === "chat" ? "Chat composer" : "Save composer"}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <textarea
+        ref={textareaRef}
+        className="composer-input"
+        rows={1}
+        value={text}
+        placeholder={PLACEHOLDER[mode]}
+        aria-label={PLACEHOLDER[mode]}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={onKeyDown}
+        autoComplete="off"
+        spellCheck
+      />
+      <div className="composer-row">
+        <ModeSelect value={mode} onChange={onModeChange} />
+        {busy ? (
+          <button key="stop" type="button" className="composer-send" onClick={onStop} aria-label="Stop generating">
+            <StopIcon size={16} />
+          </button>
+        ) : (
+          <button
+            key="send"
+            type="submit"
+            className="composer-send"
+            disabled={!canSubmit}
+            aria-label={mode === "chat" ? "Send message" : "Save thought"}
+          >
+            <ArrowUpIcon size={18} />
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}

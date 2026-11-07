@@ -8,7 +8,29 @@ We want it to be both a place to make things and a home for the ongoing work beh
 
 Our starting point is small and concrete: **one beautiful interface with two ways to begin—Chat or Save.**
 
-> **Project status:** Early development. This README describes the larger vision and our first build target. The initial interface still needs to be implemented and tested; later tools and integrations remain possibilities to explore.
+> **Project status:** Early development. This README describes the larger vision and our first build target. The first interface (Chat or Save) is implemented in this repository; later tools and integrations remain possibilities to explore.
+
+## Running the first interface
+
+The first build is a small web app: a React + TypeScript client (Vite) and a Node server (Hono) that holds the model credential. Saved entries live in the browser's local storage for now; the server exists only so a model key never reaches the client.
+
+```bash
+npm install
+cp .env.example .env     # optional: add OPENAI_API_KEY or ANTHROPIC_API_KEY to enable Chat
+npm run dev              # client on http://localhost:5173, API on :8787
+```
+
+Without a key, the interface says so and Save still works. Nothing is ever faked: Chat only answers when a real model is connected.
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Run the client and the API server together, with reload |
+| `npm run check` | Typecheck, unit tests, and a production build |
+| `npm run test:e2e` | Browser tests (uses the Chrome already installed on the machine) |
+| `npm run build` then `npm start` | Serve the built client and API from one process |
+| `node scripts/screenshots.mjs` | Capture the main screens at desktop and mobile widths |
+
+Layout: `src/` is the client, `server/` the API, `shared/` the wire protocol both sides use, `api/` the Vercel entry point for the same API (with `vercel.json`), and `e2e/` the browser tests. Saved entries are a single versioned document (`src/lib/types.ts`) so the shape can grow to hold pages of *The Entrance Way* later. Sample entries are built in, labeled as samples, and never stored.
 
 ## What we mean by a Composition Studio
 
