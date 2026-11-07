@@ -9,9 +9,11 @@ interface Props {
   /** Index of the first message that will be sent with the next reply; earlier ones are kept but not sent. */
   contextStart: number;
   onDelete: (id: string) => void;
+  /** Opens a saved entry that a reply drew on. */
+  onOpenSource?: (id: string) => void;
 }
 
-export function ChatView({ entry, pending, contextStart, onDelete }: Props) {
+export function ChatView({ entry, pending, contextStart, onDelete, onOpenSource }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const lastMessageId = entry.messages[entry.messages.length - 1]?.id;
 
@@ -33,6 +35,28 @@ export function ChatView({ entry, pending, contextStart, onDelete }: Props) {
             )}
             <div className="message-body">{m.content}</div>
             {m.note && <p className="message-note">{m.note}</p>}
+            {m.role === "assistant" && m.sources && (
+              <p className="message-sources">
+                {m.sources.length === 0 ? (
+                  "No saved pages matched this question."
+                ) : (
+                  <>
+                    <span className="message-sources-label">Sources</span>
+                    {m.sources.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="source-chip"
+                        title={s.title}
+                        onClick={() => onOpenSource?.(s.id)}
+                      >
+                        {s.page !== undefined ? `Page ${s.page}` : s.title}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </p>
+            )}
           </li>
         ))}
         {pending !== null && (

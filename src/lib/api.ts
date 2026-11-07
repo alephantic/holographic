@@ -1,3 +1,4 @@
+import type { SourceRef } from "../../shared/entries";
 import { ACCESS_HEADER, type ChatEvent, type ChatTurn, type StatusResponse } from "../../shared/protocol";
 
 export type ApiStatus =
@@ -44,6 +45,7 @@ export async function streamChat(
   onText: (chunk: string) => void,
   signal?: AbortSignal,
   accessKey?: string | null,
+  onSources?: (sources: SourceRef[]) => void,
 ): Promise<ChatFailure | null> {
   let res: Response;
   try {
@@ -82,6 +84,7 @@ export async function streamChat(
       if (!line) continue;
       const event = JSON.parse(line) as ChatEvent;
       if (event.type === "text") onText(event.text);
+      else if (event.type === "sources") onSources?.(event.sources);
       else if (event.type === "error") return { code: event.code, message: event.message };
       else if (event.type === "done") return null;
     }

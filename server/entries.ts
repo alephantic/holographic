@@ -4,6 +4,7 @@ import { ACCESS_HEADER } from "../shared/protocol.js";
 import { accessGranted } from "./access.js";
 import { storageConfigured } from "./db/client.js";
 import * as repo from "./db/repository.js";
+import { retrieve } from "./retrieval.js";
 
 // Studio storage routes. Every route needs the access key (when one is set)
 // and a configured database; the database credential never leaves the server.
@@ -85,6 +86,17 @@ entriesApp.post("/import", guarded(async (c) => {
   }
   const plan = await repo.importEntries(entries, body.dryRun === true);
   return c.json(plan);
+}));
+
+/** What a question would retrieve from the saved pages: the same search the chat uses, for inspection. */
+entriesApp.get("/search", guarded(async (c) => {
+  const q = c.req.query("q") ?? "";
+  if (!q.trim()) return c.json(fail("bad_request", "Give a question as ?q=."), 400);
+  const result = await retrieve(q);
+  return c.json({
+    mode: result.mode,
+    results: result.passages.map((p) => ({ id: p.id, title: p.title, page: p.page ?? null, rank: p.rank, excerpt: p.text.slice(0, 300) })),
+  });
 }));
 
 /** The whole studio as a Holographic export file. */

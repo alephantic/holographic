@@ -5,6 +5,7 @@ import { ACCESS_HEADER, type ChatEvent, type ChatRequest, type ChatTurn, type St
 import { accessGranted, accessKeyRequired } from "./access.js";
 import { storageConfigured } from "./db/client.js";
 import { selectProvider } from "./providers.js";
+import { assembleContext, retrieve } from "./retrieval.js";
 
 const SYSTEM_PROMPT =
   "You are the conversational side of Holographic, a composition studio for writing, design, music, " +
@@ -89,7 +90,16 @@ chatApp.post("/chat", async (c) => {
       await stream.writeln(JSON.stringify(event));
     };
     try {
-      const result = await provider.reply(SYSTEM_PROMPT, turns, (text) => send({ type: "text", text }));
+      // With studio storage, the saved pages are searched for every question and
+      // the matches are quoted to the model; the reader sees which ones were used.
+      let system = SYSTEM_PROMPT;
+      if (storageConfigured()) {
+        const question = turns[turns.length - 1]!.content;
+        const context = assembleContext(await retrieve(question));
+        await send({ type: "sources", sources: context.included });
+        system = `${SYSTEM_PROMPT}\n\n${context.text}`;
+      }
+      const result = await provider.reply(system, turns, (text) => send({ type: "text", text }));
       if (result.refusal) await send({ type: "error", code: "refusal", message: result.refusal });
       else await send({ type: "done" });
     } catch (error) {

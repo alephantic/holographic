@@ -25,8 +25,12 @@ export type StatusResponse = (
 /** Header carrying the shared access key, when one is configured. */
 export const ACCESS_HEADER = "x-holographic-key";
 
+import type { SourceRef } from "./entries";
+
 /** Newline-delimited JSON events streamed back from POST /api/chat. */
 export type ChatEvent =
+  /** Sent before any text when saved pages were searched for this turn; `sources` may be empty. */
+  | { type: "sources"; sources: SourceRef[] }
   | { type: "text"; text: string }
   | { type: "done" }
   | { type: "error"; code: ChatErrorCode; message: string };

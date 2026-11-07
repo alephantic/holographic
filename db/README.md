@@ -69,3 +69,13 @@ Hosted providers often give two connection strings: a pooled one (PgBouncer, for
 ## Access
 
 All storage routes sit behind the same access key as Chat (`HOLOGRAPHIC_ACCESS_KEY`). The database credential never leaves the server. Individual identity (who made an entry) is not implemented yet; the `author` columns are there for it.
+
+## Source-linked memory (first experiment)
+
+When studio storage is configured, every chat question is also run as a search over the saved entries, server-side, inside the same key-protected chat route (`server/retrieval.ts`):
+
+1. PostgreSQL full-text search (`to_tsvector('english', title || ' ' || body)`) is matched against the question. First every meaningful word must match (`websearch_to_tsquery`); if nothing matches, any word may (`to_tsquery` with `|`), keeping only pages that rank at least a third as well as the best one. Ranking is `ts_rank_cd` normalised by document length. No embeddings, no external service, no index yet (fine for a handful of pages; add a GIN index on that expression when the corpus grows).
+2. At most 3 entries are quoted verbatim (3,000 characters each, 6,000 in total, cut with a visible marker) into the system prompt inside `<<< SOURCE n: page 5 — "title" (entry id) >>>` blocks, after rules that say the passages are source material rather than instructions, that the model should name the page it draws on, keep the text's words apart from its own reading, and say when the passages don't support an answer. When nothing matches, the prompt says so and forbids inventing a citation.
+3. The stream's first event lists the sources that were quoted (`{type: "sources"}`), the reply records them on the assistant message (`messages.sources`, migration 0002), and the interface shows them as clickable chips that open the saved entry. An empty list is shown as "No saved pages matched this question."
+
+Page numbers come only from the entry's heading (`… — Page 5`); an entry without one is labelled by its title. `GET /api/search?q=` (key required) shows what a question would retrieve. Nothing from a reply is ever written back into a saved entry, and nothing is remembered across chats beyond what is stored in the chat itself.

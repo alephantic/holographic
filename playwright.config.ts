@@ -20,6 +20,8 @@ export const STUDIO_DATABASE_URL = process.env.HOLOGRAPHIC_TEST_DATABASE_URL;
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  // Database-backed specs share one test database, so files must not run side by side.
+  workers: 1,
   retries: 0,
   reporter: "list",
   use: {
@@ -29,10 +31,10 @@ export default defineConfig({
   },
   globalSetup: STUDIO_DATABASE_URL ? "./e2e/studio.setup.ts" : undefined,
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /studio\.spec/ },
-    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" }, testIgnore: /(studio|gate)\.spec/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /(studio|memory)\.spec/ },
+    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" }, testIgnore: /(studio|memory|gate)\.spec/ },
     ...(STUDIO_DATABASE_URL
-      ? [{ name: "studio", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testMatch: /studio\.spec/ }]
+      ? [{ name: "studio", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testMatch: /(studio|memory)\.spec/ }]
       : []),
   ],
   webServer: [

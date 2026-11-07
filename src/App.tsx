@@ -23,6 +23,7 @@ import {
 import { studio, StudioError } from "./lib/studio";
 import { applyMerge, createExport, planMerge, type MergePreview } from "./lib/transfer";
 import type { ChatEntry, Entry, Library, MessageRecord } from "./lib/types";
+import type { SourceRef } from "../shared/entries";
 
 const MODE_KEY = "holographic.mode";
 const ACCESS_KEY = "holographic.accessKey";
@@ -261,6 +262,7 @@ export function App() {
       setPending({ chatId: chat.id, text: "" });
 
       let reply = "";
+      let sources: SourceRef[] | undefined;
       let failure: { code: string; message: string } | null = null;
       // Only a bounded window of recent messages goes to the model; the whole chat stays stored.
       const context = selectContext(chat.messages);
@@ -274,6 +276,9 @@ export function App() {
           },
           controller.signal,
           accessKeyRef.current,
+          (found) => {
+            sources = found;
+          },
         );
       } catch (error) {
         failure =
@@ -290,6 +295,7 @@ export function App() {
       if (reply.trim()) {
         const assistant = makeMessage("assistant", reply);
         if (failure) assistant.note = failure.message;
+        if (sources) assistant.sources = sources;
         appendMessage(chat.id, assistant);
       } else if (failure) {
         const last = chat.messages[chat.messages.length - 1];
@@ -414,6 +420,7 @@ export function App() {
                   pending={pending?.chatId === activeEntry.id ? pending.text : null}
                   contextStart={activeEntry.sample ? 0 : (selectContext(activeEntry.messages)?.startIndex ?? 0)}
                   onDelete={deleteEntry}
+                  onOpenSource={openEntry}
                 />
               ) : (
                 <SavedView entry={activeEntry} onDelete={deleteEntry} />
@@ -470,7 +477,7 @@ function Hint({
     lead = "No model connected.";
     rest = "Add OPENAI_API_KEY or ANTHROPIC_API_KEY to the server's .env to chat. Save works without it.";
   } else if (status.state === "ready") {
-    rest = `Replies come from ${status.model}.${backend === "studio" ? " Chats are kept in the studio." : ""}`;
+    rest = `Replies come from ${status.model}.${backend === "studio" ? " Saved pages are searched for each question; chats are kept in the studio." : ""}`;
   }
   return (
     <p className="hint" role="status">

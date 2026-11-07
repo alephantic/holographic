@@ -2,6 +2,14 @@
 
 export type EntryKind = "chat" | "saved";
 
+/** A saved entry that was quoted to the model for a reply. Only real ids and titles; page is parsed from the entry, never invented. */
+export interface SourceRef {
+  id: string;
+  title: string;
+  /** Page number parsed from the entry's heading, when it has one. */
+  page?: number;
+}
+
 export interface MessageRecord {
   id: string;
   role: "user" | "assistant";
@@ -9,6 +17,8 @@ export interface MessageRecord {
   createdAt: string; // ISO 8601
   /** Present when the message could not be answered (e.g. no model connected). */
   note?: string;
+  /** For assistant replies: which saved entries were consulted. An empty list means retrieval ran and found nothing. */
+  sources?: SourceRef[];
 }
 
 interface EntryBase {
@@ -46,6 +56,7 @@ export const MAX_BODY_LENGTH = 500_000;
 export const MAX_MESSAGE_LENGTH = 200_000;
 export const MAX_NOTE_LENGTH = 500;
 export const MAX_MESSAGES_PER_CHAT = 5_000;
+export const MAX_SOURCES_PER_MESSAGE = 10;
 
 const ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 
@@ -64,7 +75,17 @@ export function isMessageRecord(value: unknown): value is MessageRecord {
   if (m.role !== "user" && m.role !== "assistant") return false;
   if (!isText(m.content, MAX_MESSAGE_LENGTH) || !isIso(m.createdAt)) return false;
   if (m.note !== undefined && !isText(m.note, MAX_NOTE_LENGTH)) return false;
+  if (m.sources !== undefined) {
+    if (!Array.isArray(m.sources) || m.sources.length > MAX_SOURCES_PER_MESSAGE || !m.sources.every(isSourceRef)) return false;
+  }
   return true;
+}
+
+export function isSourceRef(value: unknown): value is SourceRef {
+  if (!value || typeof value !== "object") return false;
+  const s = value as Record<string, unknown>;
+  if (typeof s.id !== "string" || !ID.test(s.id) || !isText(s.title, MAX_TITLE_LENGTH)) return false;
+  return s.page === undefined || (typeof s.page === "number" && Number.isInteger(s.page) && s.page > 0);
 }
 
 /** Structural check used by the browser store, the import path, and the server. */
@@ -97,6 +118,7 @@ export function cleanEntry(entry: Entry): Entry {
       content: m.content,
       createdAt: m.createdAt,
       ...(m.note ? { note: m.note } : {}),
+      ...(m.sources ? { sources: m.sources.map((r) => ({ id: r.id, title: r.title, ...(r.page ? { page: r.page } : {}) })) } : {}),
     })),
   };
 }
