@@ -97,12 +97,14 @@ chatApp.post("/chat", async (c) => {
       // the matches are quoted to the model; the reader sees which ones were used.
       let system = SYSTEM_PROMPT;
       let memoryRefs: (MemoryRef & { label: string })[] = [];
+      let memoryOmitted = 0;
       if (storageConfigured()) {
         const question = turns[turns.length - 1]!.content;
         // Established project memory first (it frames the conversation), then the pages found for this question.
         await ensureProject();
         const memory = assembleMemoryContext((await listMemories(DEFAULT_PROJECT.id)).filter((m) => m.status === "accepted"));
         memoryRefs = memory.refs;
+        memoryOmitted = memory.omitted.length;
         const context = assembleContext(await retrieve(question));
         await send({ type: "sources", sources: context.included });
         system = `${SYSTEM_PROMPT}\n\n${memory.text}\n\n${context.text}`;
@@ -112,7 +114,9 @@ chatApp.post("/chat", async (c) => {
         replyText += text;
         return send({ type: "text", text });
       });
-      if (storageConfigured()) await send({ type: "memories", memories: citedRefs(replyText, memoryRefs) });
+      if (storageConfigured()) {
+        await send({ type: "memories", memories: citedRefs(replyText, memoryRefs), included: memoryRefs.length, omitted: memoryOmitted });
+      }
       if (result.refusal) await send({ type: "error", code: "refusal", message: result.refusal });
       else await send({ type: "done" });
     } catch (error) {

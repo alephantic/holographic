@@ -4,6 +4,8 @@ import { formatStamp } from "../lib/format";
 
 interface Props {
   memories: Memory[];
+  /** What a chat receives right now: the size limit and which accepted memories fit. */
+  context: { limit: number; included: string[]; omitted: string[] } | null;
   loading: boolean;
   error: string | null;
   /** Memory to draw attention to, e.g. one a reply cited. */
@@ -16,7 +18,8 @@ interface Props {
 }
 
 /** The project's memory: suggestions to review, then what has been accepted, with sources and history. */
-export function MemoryView({ memories, loading, error, highlightId, onAccept, onReject, onCorrect, onOpenSource, loadHistory }: Props) {
+export function MemoryView({ memories, context, loading, error, highlightId, onAccept, onReject, onCorrect, onOpenSource, loadHistory }: Props) {
+  const omittedIds = new Set(context?.omitted ?? []);
   const suggested = memories.filter((m) => m.status === "suggested");
   const decisions = memories.filter((m) => m.status === "accepted" && m.kind === "decision");
   const open = memories.filter((m) => m.status === "accepted" && m.kind === "open");
@@ -32,6 +35,18 @@ export function MemoryView({ memories, loading, error, highlightId, onAccept, on
           <span>{decisions.length} decided, {open.length} open{suggested.length ? `, ${suggested.length} to review` : ""}</span>
         </p>
       </div>
+      <p className="memory-scope">
+        One shared project for the studio: everyone with the access key sees and can change these, and every chat receives the accepted
+        ones, up to {(context?.limit ?? 4000).toLocaleString()} characters: decisions first, newest first.
+        {context && context.omitted.length > 0 ? (
+          <strong>
+            {" "}
+            {context.omitted.length} accepted {context.omitted.length === 1 ? "memory is" : "memories are"} currently over that limit and not given to chats; they are marked below.
+          </strong>
+        ) : context ? (
+          <> All {context.included.length} accepted {context.included.length === 1 ? "memory fits" : "memories fit"}.</>
+        ) : null}
+      </p>
       {error && (
         <p className="memory-error" role="alert">
           {error}
@@ -52,14 +67,14 @@ export function MemoryView({ memories, loading, error, highlightId, onAccept, on
       {decisions.length > 0 && (
         <Section title="Decisions" hint="Settled, as you accepted them.">
           {decisions.map((m) => (
-            <MemoryItem key={m.id} memory={m} mode="accepted" highlighted={m.id === highlightId} onAccept={onAccept} onReject={onReject} onCorrect={onCorrect} onOpenSource={onOpenSource} loadHistory={loadHistory} />
+            <MemoryItem key={m.id} memory={m} mode="accepted" omitted={omittedIds.has(m.id)} highlighted={m.id === highlightId} onAccept={onAccept} onReject={onReject} onCorrect={onCorrect} onOpenSource={onOpenSource} loadHistory={loadHistory} />
           ))}
         </Section>
       )}
       {open.length > 0 && (
         <Section title="Open" hint="Ideas and questions still being considered.">
           {open.map((m) => (
-            <MemoryItem key={m.id} memory={m} mode="accepted" highlighted={m.id === highlightId} onAccept={onAccept} onReject={onReject} onCorrect={onCorrect} onOpenSource={onOpenSource} loadHistory={loadHistory} />
+            <MemoryItem key={m.id} memory={m} mode="accepted" omitted={omittedIds.has(m.id)} highlighted={m.id === highlightId} onAccept={onAccept} onReject={onReject} onCorrect={onCorrect} onOpenSource={onOpenSource} loadHistory={loadHistory} />
           ))}
         </Section>
       )}
@@ -86,6 +101,7 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 function MemoryItem({
   memory,
   mode,
+  omitted = false,
   highlighted,
   onAccept,
   onReject,
@@ -95,6 +111,8 @@ function MemoryItem({
 }: {
   memory: Memory;
   mode: "review" | "accepted";
+  /** Accepted but currently over the size limit, so chats don't receive it. */
+  omitted?: boolean;
   highlighted: boolean;
 } & Pick<Props, "onAccept" | "onReject" | "onCorrect" | "onOpenSource" | "loadHistory">) {
   const [editing, setEditing] = useState(false);
@@ -156,6 +174,7 @@ function MemoryItem({
         {memory.source.quote && <q className="memory-quote">{memory.source.quote}</q>}
         {memory.text !== memory.originalText && <span className="memory-edited">edited from the proposal</span>}
         {memory.supersedes && <span className="memory-edited">corrected</span>}
+        {omitted && <span className="memory-omitted">not given to chats (over the limit)</span>}
       </p>
       <div className="memory-actions">
         {mode === "review" && !editing && (

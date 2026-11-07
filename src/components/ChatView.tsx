@@ -12,7 +12,7 @@ interface Props {
   /** Opens a saved entry that a reply drew on. */
   onOpenSource?: (id: string) => void;
   /** Opens the project memory, focused on one memory a reply cited. */
-  onOpenMemory?: (id: string) => void;
+  onOpenMemory?: (id: string | null) => void;
   /** Proposes project memories from this chat; shown only when the studio is active. */
   onCapture?: () => void;
   captureState?: "idle" | "working" | "done";
@@ -52,14 +52,19 @@ export function ChatView({ entry, pending, contextStart, onDelete, onOpenSource,
             )}
             <div className="message-body">{m.content}</div>
             {m.note && <p className="message-note">{m.note}</p>}
-            {m.role === "assistant" && m.memoryRefs && m.memoryRefs.length > 0 && (
+            {m.role === "assistant" && ((m.memoryRefs && m.memoryRefs.length > 0) || m.memoryOmitted) && (
               <p className="message-sources">
-                <span className="message-sources-label">Memory</span>
-                {m.memoryRefs.map((r) => (
+                {m.memoryRefs && m.memoryRefs.length > 0 && <span className="message-sources-label">Memory</span>}
+                {(m.memoryRefs ?? []).map((r) => (
                   <button key={r.id} type="button" className="source-chip" title={r.text} onClick={() => onOpenMemory?.(r.id)}>
                     {r.kind === "decision" ? "Decision" : "Open"}: {r.text.length > 40 ? `${r.text.slice(0, 40).trimEnd()}…` : r.text}
                   </button>
                 ))}
+                {m.memoryOmitted ? (
+                  <button type="button" className="text-button message-omitted" onClick={() => onOpenMemory?.(null)}>
+                    {m.memoryOmitted} accepted {m.memoryOmitted === 1 ? "memory wasn't" : "memories weren't"} given to the model (over the limit)
+                  </button>
+                ) : null}
               </p>
             )}
             {m.role === "assistant" && m.sources && (

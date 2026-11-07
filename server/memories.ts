@@ -6,7 +6,7 @@ import { storageConfigured } from "./db/client.js";
 import * as mem from "./db/memories.js";
 import { newId } from "./db/ids.js";
 import { ConflictError, getEntry, NotFoundError } from "./db/repository.js";
-import { proposeFromChat } from "./memory.js";
+import { assembleMemoryContext, MAX_MEMORY_CONTEXT_CHARS, proposeFromChat } from "./memory.js";
 import { selectProvider } from "./providers.js";
 
 // Project memory routes: propose from a chat, review, correct, and read history.
@@ -40,7 +40,14 @@ const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && 
 
 memoriesApp.get("/project", guarded(async (c) => {
   const project = await mem.ensureProject();
-  return c.json({ project, memories: await mem.listMemories(project.id) });
+  const memories = await mem.listMemories(project.id);
+  // What a chat would receive right now, so the interface can show what is and isn't included.
+  const context = assembleMemoryContext(memories.filter((m) => m.status === "accepted"));
+  return c.json({
+    project,
+    memories,
+    context: { limit: MAX_MEMORY_CONTEXT_CHARS, included: context.refs.map((r) => r.id), omitted: context.omitted.map((m) => m.id) },
+  });
 }));
 
 /** Reads one chat and proposes candidate memories from it (one model call). Nothing is accepted here. */

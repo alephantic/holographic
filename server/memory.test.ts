@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatEntry } from "../shared/entries";
 import type { Memory } from "../shared/memory";
-import { assembleMemoryContext, citedRefs, isInsideQuotationMarks, transcriptFor, validateCandidates } from "./memory";
+import { assembleMemoryContext, citedRefs, isInsideQuotationMarks, looksPasted, MAX_MEMORY_CONTEXT_CHARS, orderForContext, transcriptFor, validateCandidates } from "./memory";
 
 const at = "2026-11-07T10:00:00.000Z";
 const chat: ChatEntry = {
@@ -15,6 +15,7 @@ const chat: ChatEntry = {
     { id: "m2", role: "assistant", content: "You could add a timeline view later.", createdAt: at },
     { id: "m3", role: "user", content: "Maybe a timeline, I'm not sure yet.", createdAt: at },
     { id: "m4", role: "user", content: "Here is the page: “Princhetta decided to leave the balcony forever.” What do you make of it?", createdAt: at },
+    { id: "m5", role: "user", content: "From the manuscript, page 6:\nPrinchetta decided to burn the preface.\nIs that too abrupt?", createdAt: at },
   ],
 };
 let n = 0;
@@ -55,6 +56,22 @@ describe("validateCandidates", () => {
     expect(out[0]?.sourceQuote).toBeNull();
     expect(out[0]?.adjusted).toMatch(/not found verbatim/);
     expect(validateCandidates(null, chat, newId)).toEqual([]);
+  });
+});
+
+describe("looksPasted", () => {
+  it("treats text introduced as a page, excerpt, or paste as quoted even without quotation marks", () => {
+    expect(looksPasted("From the manuscript, page 6:\nPrinchetta decided to burn the preface.", "Princhetta decided to burn the preface.")).toBe(true);
+    expect(looksPasted("I pasted this: she left.", "she left.")).toBe(true);
+    expect(looksPasted("We decided to burn the preface.", "decided to burn the preface")).toBe(false);
+  });
+  it("is applied during validation", () => {
+    const out = validateCandidates({ candidates: [{ kind: "decision", text: "Burn the preface.", message_id: "m5", quote: "Princhetta decided to burn the preface.", speaker: "person" }] }, chat, newId);
+    expect(out[0]).toMatchObject({ kind: "open", attributedTo: "quoted" });
+  });
+  it("honours the model's own quoted judgement", () => {
+    const out = validateCandidates({ candidates: [{ kind: "decision", text: "x", message_id: "m3", quote: "Maybe a timeline", speaker: "quoted" }] }, chat, newId);
+    expect(out[0]).toMatchObject({ kind: "open", attributedTo: "quoted" });
   });
 });
 
@@ -109,11 +126,31 @@ describe("assembleMemoryContext", () => {
     expect(refs).toEqual([]);
   });
 
-  it("stays within its budget", () => {
-    const many = Array.from({ length: 200 }, (_, i) => memory(`m${i}`, "open", "x".repeat(100)));
-    const { text, refs } = assembleMemoryContext(many);
-    expect(text.length).toBeLessThan(5_000);
-    expect(refs.length).toBeLessThan(200);
+  it("orders decisions first, newest first, and names what it left out", () => {
+    const many = [
+      ...Array.from({ length: 30 }, (_, i) => memory(`o${i}`, "open", `open ${i} ` + "x".repeat(150), { updatedAt: `2026-11-0${1 + (i % 7)}T00:00:00.000Z` })),
+      ...Array.from({ length: 10 }, (_, i) => memory(`d${i}`, "decision", `decision ${i} ` + "x".repeat(150), { updatedAt: `2026-11-0${1 + (i % 7)}T00:00:00.000Z` })),
+    ];
+    const ordered = orderForContext(many);
+    expect(ordered.slice(0, 10).every((m) => m.kind === "decision")).toBe(true);
+    expect(ordered[0]!.updatedAt >= ordered[9]!.updatedAt).toBe(true);
+    const { text, refs, omitted } = assembleMemoryContext(many);
+    expect(refs.length + omitted.length).toBe(40);
+    expect(refs.every((r) => r.kind === "decision") || refs.filter((r) => r.kind === "decision")).toBeTruthy();
+    expect(text).toMatch(new RegExp(`NOT INCLUDED: ${omitted.length} more accepted memories were left out because this block is limited to 4,000 characters`));
+    expect(text).toMatch(/You have not seen them/);
+    const body = text.split("\n\n")[1] ?? "";
+    expect(body.length).toBeLessThanOrEqual(MAX_MEMORY_CONTEXT_CHARS);
+    // Everything included precedes everything omitted in context order.
+    const includedIds = new Set(refs.map((r) => r.id));
+    const firstOmitted = ordered.findIndex((m) => !includedIds.has(m.id));
+    expect(ordered.slice(firstOmitted).every((m) => !includedIds.has(m.id))).toBe(true);
+  });
+
+  it("has no omission note when everything fits", () => {
+    const { text, omitted } = assembleMemoryContext([memory("a", "decision", "Keep one shared key.")]);
+    expect(omitted).toEqual([]);
+    expect(text).not.toMatch(/NOT INCLUDED/);
   });
 });
 

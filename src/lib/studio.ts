@@ -59,7 +59,8 @@ export const studio = {
   fetchExport: (key: string | null) => call<ExportDocument>("/export", key),
 
   // Project memory
-  fetchProject: (key: string | null) => call<{ project: Project; memories: Memory[] }>("/project", key),
+  fetchProject: (key: string | null) =>
+    call<{ project: Project; memories: Memory[]; context: { limit: number; included: string[]; omitted: string[] } }>("/project", key),
   capture: (entryId: string, key: string | null) =>
     call<{ proposed: Memory[]; adjustments: Record<string, string>; considered: number }>("/project/capture", key, {
       method: "POST",

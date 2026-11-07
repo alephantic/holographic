@@ -33,7 +33,7 @@ export type ChatEvent =
   /** Sent before any text when saved pages were searched for this turn; `sources` may be empty. */
   | { type: "sources"; sources: SourceRef[] }
   /** Sent after the reply text when project memory was available: the accepted memories the reply cited. */
-  | { type: "memories"; memories: MemoryRef[] }
+  | { type: "memories"; memories: MemoryRef[]; included: number; omitted: number }
   | { type: "text"; text: string }
   | { type: "done" }
   | { type: "error"; code: ChatErrorCode; message: string };

@@ -46,7 +46,7 @@ export async function streamChat(
   signal?: AbortSignal,
   accessKey?: string | null,
   onSources?: (sources: SourceRef[]) => void,
-  onMemories?: (memories: MemoryRefLite[]) => void,
+  onMemories?: (memories: MemoryRefLite[], counts: { included: number; omitted: number }) => void,
 ): Promise<ChatFailure | null> {
   let res: Response;
   try {
@@ -86,7 +86,7 @@ export async function streamChat(
       const event = JSON.parse(line) as ChatEvent;
       if (event.type === "text") onText(event.text);
       else if (event.type === "sources") onSources?.(event.sources);
-      else if (event.type === "memories") onMemories?.(event.memories);
+      else if (event.type === "memories") onMemories?.(event.memories, { included: event.included, omitted: event.omitted });
       else if (event.type === "error") return { code: event.code, message: event.message };
       else if (event.type === "done") return null;
     }

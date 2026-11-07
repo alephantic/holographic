@@ -42,10 +42,12 @@ Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPI
 - Work in stages; stop at the checkpoints below and report honestly what passed and what didn't.
 - Inspect existing code before deciding implementation details.
 
-## Where things stand (updated 2026-11-07, project memory built, not deployed)
+## Where things stand (updated 2026-11-07, project memory prepared for a small live test; not deployed)
 
-Production (commit `212b3c6` deployed; migrations 0001–0002 applied on Neon) runs studio storage, the shared key, and source-linked search over saved pages. Five Princhetta pages live there and must not be touched. The Hindsight comparison lives outside the repo in `../hindsight-experiment/` (container stopped, volume kept).
+Production (commit `212b3c6` deployed; migrations 0001–0002 on Neon) runs studio storage, the shared key, and source-linked search. Five Princhetta pages live there and must not be touched. The Hindsight comparison lives in `../hindsight-experiment/` (container stopped, volume kept).
 
-Built and tested locally since then, **not deployed, migration 0003 not applied on Neon**: project memory (capture, review, recall, corrections with history). Automated: 11 unit tests + 7 browser tests on fixtures with the test provider; plus one real-model capture/recall on the fixture locally. Next, with the owner's go-ahead: `npm run db:migrate:neon` (adds projects, memories, memory_events, messages.memory_refs; additive), deploy, then capture a real chat. Hindsight is not integrated; see db/README.md for where it could replace retrieval later.
+Built and tested locally, **not deployed, migration 0003 not on Neon**: project memory (capture, review, recall, corrections with history) with a visible, predictable memory limit (4,000 chars; decisions first, newest first; omitted count told to the model, shown under replies, and marked in the Project memory view), a shared-project scope note, and pasted-text handling (quotation marks, or an introduction such as "page …:" / "from the manuscript:"). Rollback: `db/rollback/0003_project_memory.down.sql` (by hand). Tests: 41 unit, 56 browser on fixtures with the test provider; one real-model capture/recall on a fixture locally.
 
-Known limits: one project only (`default`); accepted memory is always included in every chat (bounded to 4,000 chars) rather than only when asked; the capture quality depends on the model, the server only enforces attribution and verbatim quotes; no cross-project or per-person scoping (shared key, shared workspace by decision).
+To go live, with the owner's approval: `npm run db:migrate:neon` (0003, additive) → `npx vercel@65.12.1 deploy --prod --yes` → "Remember this chat" on a real conversation, review, then ask a fresh chat where the project stands. Costs: one model call per capture (cents), plus up to 4,000 extra characters per chat request.
+
+Known limits: one shared project; no relevance ranking (fixed order, cap); model judgement decides what is proposed and how it is worded; pasted text with neither quotation marks nor an introduction is not recognised as quoted; no Markdown in replies; saved entries not editable in place.

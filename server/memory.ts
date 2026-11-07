@@ -65,6 +65,21 @@ export function isInsideQuotationMarks(content: string, quote: string): boolean 
   return false;
 }
 
+/** Words that introduce pasted material; a quote that follows one of these (before a colon) is treated as quoted text. */
+const PASTE_INTRO = /\b(page|pages|excerpt|passage|paste[sd]?|quot(?:e|ed|ing)|from the (?:story|book|manuscript|draft|novel))\b[^:\n]{0,80}:\s*$/i;
+
+/**
+ * Heuristic for pasted text without quotation marks: the quote is preceded, within
+ * the same message, by an introduction such as "Here is a page:". A model's own
+ * "quoted" judgement is honoured too. Neither can read every ambiguous message.
+ */
+export function looksPasted(content: string, quote: string): boolean {
+  const at = content.indexOf(quote);
+  if (at < 0) return false;
+  const before = content.slice(Math.max(0, at - 160), at);
+  return PASTE_INTRO.test(before);
+}
+
 export interface ValidatedCandidate extends NewCandidate {
   /** Why the server changed what the model proposed, if it did. */
   adjusted?: string;
@@ -92,7 +107,7 @@ export function validateCandidates(raw: unknown, chat: ChatEntry, newId: () => s
     let adjusted: string | undefined;
     if (message.role === "assistant") {
       attributedTo = "assistant";
-    } else if (quote && isInsideQuotationMarks(message.content, quote)) {
+    } else if (quote && (isInsideQuotationMarks(message.content, quote) || looksPasted(message.content, quote))) {
       attributedTo = "quoted";
     }
     if (kind === "decision" && attributedTo !== "person") {
@@ -116,27 +131,51 @@ export async function proposeFromChat(chat: ChatEntry, provider: Provider, newId
   return validateCandidates(parsed, chat, newId);
 }
 
-/** Short stable labels for the model: MD1 for decisions, MO1 for open items, in creation order. */
+/**
+ * The order memories are offered to a chat, and therefore which ones survive the
+ * size limit: decisions before open items, newest first within each. Predictable
+ * on purpose; no relevance ranking in this first version.
+ */
+export function orderForContext(accepted: Memory[]): Memory[] {
+  const byRecency = (a: Memory, b: Memory) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : a.id < b.id ? -1 : 1);
+  return [...accepted.filter((m) => m.kind === "decision").sort(byRecency), ...accepted.filter((m) => m.kind === "open").sort(byRecency)];
+}
+
+/** Short stable labels for the model: MD1 for decisions, MO1 for open items, in context order. */
 export function labelMemories(accepted: Memory[]): { label: string; memory: Memory }[] {
   let d = 0;
   let o = 0;
-  return accepted.map((m) => ({ label: m.kind === "decision" ? `MD${++d}` : `MO${++o}`, memory: m }));
+  return orderForContext(accepted).map((m) => ({ label: m.kind === "decision" ? `MD${++d}` : `MO${++o}`, memory: m }));
 }
 
 /**
  * The block of established memory a chat receives. Only accepted memories,
  * each with its label, kind, source, and attribution, bounded in size.
  */
-export function assembleMemoryContext(accepted: Memory[]): { text: string; refs: (MemoryRef & { label: string })[] } {
+export interface MemoryContext {
+  text: string;
+  /** Memories actually included, in context order, with their labels. */
+  refs: (MemoryRef & { label: string })[];
+  /** Accepted memories left out because the block reached its limit. */
+  omitted: Memory[];
+}
+
+export function assembleMemoryContext(accepted: Memory[]): MemoryContext {
   const labelled = labelMemories(accepted);
   const refs: (MemoryRef & { label: string })[] = [];
+  const omitted: Memory[] = [];
   const lines: string[] = [];
   let used = 0;
+  let full = false;
   for (const { label, memory } of labelled) {
     const src = memory.source.entryTitle ? ` (from "${memory.source.entryTitle}")` : "";
     const who = memory.attributedTo === "person" ? "" : memory.attributedTo === "assistant" ? " [AI suggestion the person accepted as an open item]" : " [quoted text]";
     const line = `[${label}] ${memory.kind === "decision" ? "DECISION" : "OPEN"}: ${memory.text}${src}${who}`;
-    if (used + line.length > MAX_MEMORY_CONTEXT_CHARS) break;
+    if (full || used + line.length > MAX_MEMORY_CONTEXT_CHARS) {
+      full = true; // once the limit is reached, nothing later is included, so the order stays predictable
+      omitted.push(memory);
+      continue;
+    }
     lines.push(line);
     used += line.length;
     refs.push({ id: memory.id, kind: memory.kind, text: memory.text, label });
@@ -146,6 +185,7 @@ export function assembleMemoryContext(accepted: Memory[]): { text: string; refs:
       text:
         "PROJECT MEMORY: nothing has been accepted yet. If asked where the project stands, say that no decisions or open questions are established, and do not invent any.",
       refs,
+      omitted,
     };
   }
   const rules =
@@ -153,7 +193,11 @@ export function assembleMemoryContext(accepted: Memory[]): { text: string; refs:
     "DECISION items are settled; OPEN items are still being considered. When asked where the project stands, answer from these only, " +
     "keep decisions apart from open questions, and cite the label of each item you use, like [MD1]. " +
     "If something isn't established here, say so instead of inventing it. Anything you propose as a next step must be marked as your suggestion, not a decision.";
-  return { text: `${rules}\n\n${lines.join("\n")}`, refs };
+  const omittedNote =
+    omitted.length > 0
+      ? `\n\nNOT INCLUDED: ${omitted.length} more accepted ${omitted.length === 1 ? "memory was" : "memories were"} left out because this block is limited to ${MAX_MEMORY_CONTEXT_CHARS.toLocaleString()} characters (${omitted.filter((m) => m.kind === "decision").length} decisions, ${omitted.filter((m) => m.kind === "open").length} open). You have not seen them; if a question may depend on them, say that part of the project memory wasn't available to you.`
+      : "";
+  return { text: `${rules}\n\n${lines.join("\n")}${omittedNote}`, refs, omitted };
 }
 
 /** Which memories a reply actually drew on, by the labels it cited. */

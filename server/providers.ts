@@ -164,20 +164,25 @@ function testProvider(): Provider {
       return {};
     },
     async complete(_system, user) {
-      // Proposals: a user line beginning "Decision:" -> decision; "Maybe" -> open; an assistant line with "You could" -> suggestion.
+      // Proposals: a user message beginning "Decision:" -> decision; "Maybe" -> open; an assistant message with "You could" -> suggestion;
+      // a user message containing "decided to" -> naively proposed as the person's decision (the server must reclassify it).
       const candidates: unknown[] = [];
-      for (const m of user.matchAll(/^\[([^\]]+)\] (user|assistant): ([\s\S]*?)(?=\n\[|$)/gm)) {
+      const entries = user.split(/\n(?=\[[^\]]+\] (?:user|assistant): )/);
+      for (const entry of entries) {
+        const m = /^\[([^\]]+)\] (user|assistant): ([\s\S]*)$/.exec(entry);
+        if (!m) continue;
         const [, id, role, content] = m;
         const text = content!.trim();
+        const firstLine = text.split("\n")[0] ?? text;
         if (role === "user" && /^Decision:/i.test(text)) {
-          candidates.push({ kind: "decision", text: text.replace(/^Decision:\s*/i, ""), message_id: id, quote: text.split("\n")[0], speaker: "person" });
+          candidates.push({ kind: "decision", text: text.replace(/^Decision:\s*/i, ""), message_id: id, quote: firstLine, speaker: "person" });
         } else if (role === "user" && /^Maybe/i.test(text)) {
-          candidates.push({ kind: "open", text: text, message_id: id, quote: text.split("\n")[0], speaker: "person" });
+          candidates.push({ kind: "open", text, message_id: id, quote: firstLine, speaker: "person" });
         } else if (role === "assistant" && /You could/i.test(text)) {
-          candidates.push({ kind: "decision", text: text, message_id: id, quote: text.split("\n")[0], speaker: "assistant" });
+          candidates.push({ kind: "decision", text, message_id: id, quote: firstLine, speaker: "assistant" });
         } else if (role === "user" && /decided to/i.test(text)) {
-          // A pasted story line: the naive proposal calls it a decision; the server must not.
-          const quote = /“([^”]+)”/.exec(text)?.[1] ?? text.split("\n")[0];
+          const quoted = /“([^”]+)”/.exec(text)?.[1];
+          const quote = quoted ?? (text.split("\n").find((l) => /decided to/i.test(l)) ?? firstLine).trim();
           candidates.push({ kind: "decision", text: quote, message_id: id, quote, speaker: "person" });
         }
       }

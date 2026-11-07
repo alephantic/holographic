@@ -72,6 +72,7 @@ export function App() {
   // Project memory (studio only).
   const [view, setView] = useState<"entry" | "memory">("entry");
   const [memories, setMemories] = useState<Memory[] | null>(null);
+  const [memoryContext, setMemoryContext] = useState<{ limit: number; included: string[]; omitted: string[] } | null>(null);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryHighlight, setMemoryHighlight] = useState<string | null>(null);
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
@@ -168,6 +169,7 @@ export function App() {
     try {
       const r = await studio.fetchProject(accessKeyRef.current);
       setMemories(r.memories);
+      setMemoryContext(r.context);
       setMemoryError(null);
     } catch (error) {
       setMemoryError(error instanceof Error ? error.message : "Couldn't load the project memory.");
@@ -319,6 +321,7 @@ export function App() {
       let reply = "";
       let sources: SourceRef[] | undefined;
       let memoryRefs: MemoryRefLite[] | undefined;
+      let memoryOmitted = 0;
       let failure: { code: string; message: string } | null = null;
       // Only a bounded window of recent messages goes to the model; the whole chat stays stored.
       const context = selectContext(chat.messages);
@@ -335,8 +338,9 @@ export function App() {
           (found) => {
             sources = found;
           },
-          (cited) => {
+          (cited, counts) => {
             memoryRefs = cited;
+            memoryOmitted = counts.omitted;
           },
         );
       } catch (error) {
@@ -356,6 +360,7 @@ export function App() {
         if (failure) assistant.note = failure.message;
         if (sources) assistant.sources = sources;
         if (memoryRefs && memoryRefs.length > 0) assistant.memoryRefs = memoryRefs;
+        if (memoryOmitted > 0) assistant.memoryOmitted = memoryOmitted;
         appendMessage(chat.id, assistant);
       } else if (failure) {
         const last = chat.messages[chat.messages.length - 1];
@@ -482,6 +487,7 @@ export function App() {
             <div className="content" key="memory">
               <MemoryView
                 memories={memories ?? []}
+                context={memoryContext}
                 loading={memories === null}
                 error={memoryError}
                 highlightId={memoryHighlight}

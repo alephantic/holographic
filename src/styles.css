@@ -1103,6 +1103,30 @@ button:disabled {
   margin-right: 6px;
 }
 
+.memory-scope {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.memory-scope strong {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.memory-omitted {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+}
+
+.message-omitted {
+  font-size: 12.5px;
+  padding: 2px 4px;
+}
+
 .memory-empty,
 .memory-error {
   font-size: 14px;

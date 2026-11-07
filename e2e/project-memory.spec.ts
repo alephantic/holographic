@@ -21,6 +21,7 @@ const FIXTURE_CHAT = {
     { id: "fx-m3", role: "user", content: "Maybe a timeline is worth it, but I'm not sure yet.", createdAt: at(2) },
     { id: "fx-m4", role: "user", content: "Here is a page I pasted: “Princhetta decided to leave the balcony forever.” What do you make of it?", createdAt: at(3) },
     { id: "fx-m5", role: "assistant", content: "It reads as a turning point for her.", createdAt: at(4) },
+    { id: "fx-m6", role: "user", content: "From the manuscript, page 6:\nPrinchetta decided to burn the preface and start again.\nIs that too abrupt?", createdAt: at(5) },
   ],
 };
 
@@ -71,13 +72,15 @@ test("capturing a chat proposes labelled candidates with the right attribution",
   expect(byMsg["fx-m2"]).toMatchObject({ kind: "open", attributedTo: "assistant" }); // the AI's suggestion never becomes a decision
   expect(byMsg["fx-m3"]).toMatchObject({ kind: "open", attributedTo: "person" });
   expect(byMsg["fx-m4"]).toMatchObject({ kind: "open", attributedTo: "quoted" }); // the pasted story line is not Brennan's decision
+  expect(byMsg["fx-m6"]).toMatchObject({ kind: "open", attributedTo: "quoted" }); // nor is pasted text without quotation marks, when introduced as such
 
   await page.getByRole("button", { name: /^Project memory/ }).click();
   await expect(page.getByRole("heading", { name: /To review/ })).toBeVisible();
-  await expect(page.locator(".memory-item")).toHaveCount(4);
+  await expect(page.locator(".memory-item")).toHaveCount(5);
   await expect(page.locator(".memory-item[data-kind='decision']")).toHaveCount(1);
   await expect(page.getByText("AI suggestion")).toHaveCount(1);
-  await expect(page.getByText("quoted text")).toHaveCount(1);
+  await expect(page.getByText("quoted text")).toHaveCount(2);
+  await expect(page.locator(".memory-scope")).toContainText("One shared project for the studio");
   // Capturing again proposes nothing new.
   const again = await request.post(`${base}/api/project/capture`, { headers: KEY, data: { entryId: FIXTURE_CHAT.id } });
   expect((await again.json()).proposed).toEqual([]);
@@ -115,6 +118,7 @@ test("review: accept, accept as edited, reject; only accepted items count", asyn
   expect(accepted.map((m) => m.kind).sort()).toEqual(["decision", "open"]);
   expect(all.find((m) => m.source.messageId === "fx-m3")).toMatchObject({ text: "A timeline view is being considered; undecided." });
   expect(all.find((m) => m.source.messageId === "fx-m4")?.status).toBe("suggested"); // left unreviewed: still not established
+  expect(all.find((m) => m.source.messageId === "fx-m6")?.status).toBe("suggested");
 });
 
 test("a fresh chat can say where the project was left, citing accepted memories only", async ({ page }) => {
@@ -178,9 +182,46 @@ test("an unsupported question is answered honestly, and the original conversatio
   expect(entry.messages.map((m: { id: string; content: string }) => [m.id, m.content])).toEqual(FIXTURE_CHAT.messages.map((m) => [m.id, m.content]));
 });
 
+test("when accepted memories exceed the limit, the omission is visible to the model, the reply, and the review", async ({ page, request }) => {
+  // A long conversation of explicit decisions, each about 280 characters; a capture proposes at most 20, together well over 4,000 characters.
+  const long = {
+    id: "fixture-long-chat",
+    kind: "chat",
+    title: "Many decisions",
+    createdAt: at(10),
+    updatedAt: at(10),
+    messages: Array.from({ length: 40 }, (_, i) => ({ id: `lx-m${i}`, role: "user", content: `Decision: item ${i} is settled, ` + "and the reasons are recorded here at some length ".repeat(5), createdAt: at(10) })),
+  };
+  expect((await request.post(`${base}/api/import`, { headers: KEY, data: { entries: [long], dryRun: false } })).status()).toBe(200);
+  expect((await request.post(`${base}/api/project/capture`, { headers: KEY, data: { entryId: long.id } })).status()).toBe(200);
+  for (const m of await memories(request)) {
+    if (m.status === "suggested" && m.text.startsWith("item ")) await request.post(`${base}/api/memories/${m.id}/accept`, { headers: KEY, data: {} });
+  }
+  const project = await (await request.get(`${base}/api/project`, { headers: KEY })).json();
+  expect(project.context.limit).toBe(4000);
+  expect(project.context.omitted.length).toBeGreaterThan(0);
+  expect(project.context.included.length + project.context.omitted.length).toBe(project.memories.filter((m: { status: string }) => m.status === "accepted").length);
+
+  // The model is told exactly what it did not see.
+  const r = await request.post(`${base}/api/chat`, { headers: KEY, data: { messages: [{ role: "user", content: "Where did we leave this project?" }] } });
+  const lines = (await r.text()).trim().split("\n").map((l) => JSON.parse(l));
+  const memEvent = lines.find((l) => l.type === "memories");
+  expect(memEvent.omitted).toBe(project.context.omitted.length);
+  expect(memEvent.included).toBe(project.context.included.length);
+
+  await unlock(page);
+  await page.getByRole("button", { name: "New" }).click();
+  await page.getByRole("textbox", { name: "Message Holographic" }).fill("Where did we leave this project?");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".message-assistant").last().locator(".message-omitted")).toContainText(`${project.context.omitted.length} accepted memories weren't given to the model`);
+  await page.locator(".message-assistant").last().locator(".message-omitted").click();
+  await expect(page.locator(".memory-scope")).toContainText(`${project.context.omitted.length} accepted memories are currently over that limit`);
+  await expect(page.locator(".memory-omitted")).toHaveCount(project.context.omitted.length);
+});
+
 test.afterAll(async ({ request }) => {
   const { library } = await (await request.get(`${base}/api/entries`, { headers: KEY })).json();
   for (const e of library.entries as { id: string; title: string }[]) {
-    if (e.id === FIXTURE_CHAT.id || /Where did we leave|mayor's bicycle/.test(e.title)) await request.delete(`${base}/api/entries/${e.id}`, { headers: KEY });
+    if (e.id === FIXTURE_CHAT.id || e.id === "fixture-long-chat" || /Where did we leave|mayor's bicycle/.test(e.title)) await request.delete(`${base}/api/entries/${e.id}`, { headers: KEY });
   }
 });

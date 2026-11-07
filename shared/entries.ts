@@ -21,6 +21,8 @@ export interface MessageRecord {
   sources?: SourceRef[];
   /** For assistant replies: which accepted project memories the reply cited. */
   memoryRefs?: MemoryRefLite[];
+  /** For assistant replies: how many accepted memories were left out of the request by the size limit. */
+  memoryOmitted?: number;
 }
 
 /** A cited project memory, as stored on a message. */
@@ -90,6 +92,7 @@ export function isMessageRecord(value: unknown): value is MessageRecord {
   if (m.memoryRefs !== undefined) {
     if (!Array.isArray(m.memoryRefs) || m.memoryRefs.length > 50 || !m.memoryRefs.every(isMemoryRefLite)) return false;
   }
+  if (m.memoryOmitted !== undefined && !(Number.isInteger(m.memoryOmitted) && (m.memoryOmitted as number) >= 0)) return false;
   return true;
 }
 
@@ -138,6 +141,7 @@ export function cleanEntry(entry: Entry): Entry {
       ...(m.note ? { note: m.note } : {}),
       ...(m.sources ? { sources: m.sources.map((r) => ({ id: r.id, title: r.title, ...(r.page ? { page: r.page } : {}) })) } : {}),
       ...(m.memoryRefs ? { memoryRefs: m.memoryRefs.map((r) => ({ id: r.id, kind: r.kind, text: r.text })) } : {}),
+      ...(m.memoryOmitted ? { memoryOmitted: m.memoryOmitted } : {}),
     })),
   };
 }
