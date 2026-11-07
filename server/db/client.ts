@@ -12,6 +12,16 @@ export function databaseUrl(): string | undefined {
   return value ? value : undefined;
 }
 
+/**
+ * Connection for migrations, dumps, and scripts. Hosted Postgres often offers a
+ * pooled URL for app traffic (PgBouncer, which rejects session-level work) and a
+ * direct one; `neon env pull` writes the direct one as DATABASE_URL_UNPOOLED.
+ */
+export function directDatabaseUrl(): string | undefined {
+  const value = process.env.DATABASE_URL_UNPOOLED?.trim();
+  return value ? value : databaseUrl();
+}
+
 export function storageConfigured(): boolean {
   return databaseUrl() !== undefined;
 }
@@ -26,12 +36,14 @@ function isLocal(url: string): boolean {
 }
 
 /** Shared connection pool, created on first use. Small on purpose: serverless functions should hold few connections. */
-export function getPool(): pg.Pool {
+export function getPool(url: string | undefined = databaseUrl()): pg.Pool {
   if (pool) return pool;
-  const url = databaseUrl();
   if (!url) throw new Error("DATABASE_URL is not set");
+  // TLS is decided below from the host; a `sslmode` query parameter would make
+  // node-postgres warn about its changing semantics, so it is removed here.
+  const connectionString = stripSslMode(url);
   pool = new pg.Pool({
-    connectionString: url,
+    connectionString,
     max: 3,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 8_000,
@@ -39,6 +51,16 @@ export function getPool(): pg.Pool {
     ssl: isLocal(url) ? undefined : { rejectUnauthorized: true },
   });
   return pool;
+}
+
+function stripSslMode(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 export async function closePool(): Promise<void> {

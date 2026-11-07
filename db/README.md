@@ -50,6 +50,8 @@ Two formats, for two purposes.
 
 Neon requires TLS; the client turns it on for any non-local host. A self-hosted Postgres reachable over the internet should also use TLS (`?sslmode=require`).
 
+Hosted providers often give two connection strings: a pooled one (PgBouncer, for the app's request traffic) and a direct one. The app uses `DATABASE_URL`; migrations and the export/restore scripts use `DATABASE_URL_UNPOOLED` when it is set, since pooled connections reject the session-level work migrations need. With a single plain Postgres, set only `DATABASE_URL`.
+
 ## Access
 
 All storage routes sit behind the same access key as Chat (`HOLOGRAPHIC_ACCESS_KEY`). The database credential never leaves the server. Individual identity (who made an entry) is not implemented yet; the `author` columns are there for it.

@@ -10,6 +10,8 @@ interface Props {
   /** True while a chat reply is streaming; the submit button becomes Stop. */
   busy: boolean;
   onStop: () => void;
+  /** True while the shared studio is still loading; typing is fine, sending waits. */
+  held?: boolean;
   autoFocus?: boolean;
 }
 
@@ -18,14 +20,14 @@ const PLACEHOLDER: Record<Mode, string> = {
   save: "Write a thought to keep",
 };
 
-export function Composer({ mode, onModeChange, onSubmit, busy, onStop, autoFocus }: Props) {
+export function Composer({ mode, onModeChange, onSubmit, busy, onStop, held = false, autoFocus }: Props) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Chat messages are capped by what one request can carry; saved thoughts are not.
   const limit = mode === "chat" ? MAX_CHARS_PER_TURN : null;
   const overLimit = limit !== null && text.length > limit;
   const showCount = limit !== null && text.length > limit * 0.8;
-  const canSubmit = text.trim().length > 0 && !busy && !overLimit;
+  const canSubmit = text.trim().length > 0 && !busy && !held && !overLimit;
 
   const fit = useCallback(() => {
     const el = textareaRef.current;

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
-import { closePool, getPool, loadDotEnv } from "./client.js";
+import { closePool, directDatabaseUrl, getPool, loadDotEnv } from "./client.js";
 
 // Applies db/migrations/*.sql in name order, once each, recording what ran in
 // schema_migrations. The same files run locally (Docker) and in production.
@@ -15,7 +15,7 @@ export interface MigrationResult {
   alreadyApplied: string[];
 }
 
-export async function migrate(pool: pg.Pool = getPool()): Promise<MigrationResult> {
+export async function migrate(pool: pg.Pool = getPool(directDatabaseUrl())): Promise<MigrationResult> {
   const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql")).sort();
   const client = await pool.connect();
   try {

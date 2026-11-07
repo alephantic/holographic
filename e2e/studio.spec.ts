@@ -12,6 +12,18 @@ async function unlock(page: Page) {
   await page.getByRole("textbox", { name: "Access key" }).fill(STUDIO_ACCESS_KEY);
   await page.getByRole("button", { name: "Unlock" }).click();
   await expect(page.getByRole("form", { name: "Access key" })).toHaveCount(0);
+  await loaded(page);
+}
+
+/** Waits until every queued studio write has reached the server (the app root drops data-pending). */
+async function settled(page: Page) {
+  await page.waitForFunction('!document.querySelector(".app")?.hasAttribute("data-pending")', null, { timeout: 30_000 });
+}
+
+/** The studio may take a few seconds on a cold database; sending is held until it has loaded. */
+async function loaded(page: Page) {
+  await expect(page.locator(".hint")).toContainText(/studio|Replies come from/, { timeout: 30_000 });
+  await expect(page.locator(".hint")).not.toContainText("Loading the studio", { timeout: 30_000 });
 }
 
 async function chooseMode(page: Page, mode: "Chat" | "Save") {
@@ -50,6 +62,7 @@ test("a saved thought and a chat are kept in the database and reopen after a rel
   await page.getByRole("textbox").fill("A thought kept in Postgres.\n\nSecond line.");
   await page.keyboard.press("Enter");
   await expect(page.locator(".saved-body")).toContainText("A thought kept in Postgres.");
+  await settled(page);
 
   // Chat: the model is mocked (the server's fake key would fail upstream), storage is real.
   await page.route("**/api/chat", (r) => r.fulfill({ status: 200, contentType: "text/plain", body: '{"type":"text","text":"Kept, too."}\n{"type":"done"}\n' }));
@@ -60,13 +73,16 @@ test("a saved thought and a chat are kept in the database and reopen after a rel
   await page.getByRole("textbox").fill("And a second question.");
   await page.keyboard.press("Enter");
   await expect(page.locator(".message")).toHaveCount(4);
+  // Studio writes are queued behind the interface update; let them reach the server before reloading.
+  await settled(page);
 
   // Nothing of this went to the browser's own store.
   const local = await page.evaluate(() => localStorage.getItem("holographic.library.v1"));
   expect(JSON.parse(local ?? '{"entries":[]}').entries).toHaveLength(0);
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Chat: Will this be kept?" })).toBeVisible();
+  await loaded(page);
+  await expect(page.getByRole("button", { name: "Chat: Will this be kept?" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Chat: Will this be kept?" }).click();
   await expect(page.locator(".message .message-body")).toHaveText(["Will this be kept?", "Kept, too.", "And a second question.", "Kept, too."]);
   await page.getByRole("button", { name: "Saved: A thought kept in Postgres." }).click();
@@ -121,6 +137,7 @@ test("Send to studio previews, keeps ids and timestamps, leaves the originals, a
   await page.reload();
   await page.getByRole("textbox", { name: "Access key" }).fill(STUDIO_ACCESS_KEY);
   await page.getByRole("button", { name: "Unlock" }).click();
+  await loaded(page);
 
   const send = page.getByRole("button", { name: "Send to studio (2)" });
   await expect(send).toBeVisible();
@@ -153,6 +170,7 @@ test("delete removes an entry and its messages from the database", async ({ page
   await page.getByRole("button", { name: "Delete" }).click();
   await page.getByRole("button", { name: "Delete" }).last().click();
   await expect(page.getByRole("button", { name: "Chat: An old chat" })).toHaveCount(0);
+  await settled(page);
   await expect.poll(async () => (await request.get(`${base}/api/entries/local-chat-1`, { headers: KEY })).status()).toBe(404);
   expect(await studioIds(request)).toHaveLength(3);
 });

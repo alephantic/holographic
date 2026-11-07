@@ -75,9 +75,27 @@ export function App() {
   const storageConfigured = ready && status.storage.configured;
   const unlocked = !ready || !status.accessRequired || accessKey !== null;
   const studioAvailable = storageConfigured && unlocked;
-  const backend: Backend = studioAvailable && studioLibrary !== null ? "studio" : "browser";
+  // Once the studio is available it is the backend; the browser store is used
+  // only when the studio can't be reached (never merely while it loads).
+  const backend: Backend = studioAvailable && studioError === null ? "studio" : "browser";
+  const studioLoading = backend === "studio" && studioLibrary === null;
   const backendRef = useRef(backend);
   backendRef.current = backend;
+  // Studio writes run one after another, so a message can never reach the
+  // server before the chat it belongs to has been created there.
+  const writeQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingWrites = useRef(0);
+  // Mirrors pendingWrites for rendering: the app root carries data-pending while writes are outstanding.
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Leaving while a studio write is still on its way would risk losing it; ask first.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingWrites.current > 0) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
   const library = backend === "studio" ? (studioLibrary ?? EMPTY) : localLibrary;
 
   // Persist this browser's library whenever it changes (skip the initial load).
@@ -117,6 +135,23 @@ export function App() {
       setStudioError(error instanceof Error ? error.message : "The studio couldn't be reached.");
     },
     [dropAccessKey],
+  );
+
+  /** Queues a studio write behind any earlier ones; failures are reported, never thrown. */
+  const studioWrite = useCallback(
+    (work: () => Promise<unknown>) => {
+      pendingWrites.current += 1;
+      setPendingCount(pendingWrites.current);
+      writeQueue.current = writeQueue.current.then(() =>
+        work()
+          .then(() => setStudioError(null), reportStudio)
+          .finally(() => {
+            pendingWrites.current -= 1;
+            setPendingCount(pendingWrites.current);
+          }),
+      );
+    },
+    [reportStudio],
   );
 
   const loadStudio = useCallback(async () => {
@@ -172,33 +207,31 @@ export function App() {
   const addEntry = useCallback(
     (entry: Entry) => {
       setLib((lib) => upsertEntry(lib, entry));
-      if (backendRef.current === "studio") studio.createEntry(entry, accessKeyRef.current).then(() => setStudioError(null), reportStudio);
+      if (backendRef.current === "studio") studioWrite(() => studio.createEntry(entry, accessKeyRef.current));
     },
-    [setLib, reportStudio],
+    [setLib, studioWrite],
   );
 
   const appendMessage = useCallback(
     (chatId: string, message: MessageRecord) => {
       setLib((lib) => updateChat(lib, chatId, (c) => ({ ...c, messages: [...c.messages, message] })));
-      if (backendRef.current === "studio") {
-        studio.appendMessage(chatId, message, accessKeyRef.current).then(() => setStudioError(null), reportStudio);
-      }
+      if (backendRef.current === "studio") studioWrite(() => studio.appendMessage(chatId, message, accessKeyRef.current));
     },
-    [setLib, reportStudio],
+    [setLib, studioWrite],
   );
 
   const noteMessage = useCallback(
     (chatId: string, messageId: string, note: string) => {
       setLib((lib) => updateChat(lib, chatId, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, note } : m)) })));
-      if (backendRef.current === "studio") studio.setNote(chatId, messageId, note, accessKeyRef.current).catch(reportStudio);
+      if (backendRef.current === "studio") studioWrite(() => studio.setNote(chatId, messageId, note, accessKeyRef.current));
     },
-    [setLib, reportStudio],
+    [setLib, studioWrite],
   );
 
   const deleteEntry = (id: string) => {
     if (pending?.chatId === id) abortRef.current?.abort();
     setLib((lib) => removeEntry(lib, id));
-    if (backend === "studio") studio.deleteEntry(id, accessKey).then(() => setStudioError(null), reportStudio);
+    if (backend === "studio") studioWrite(() => studio.deleteEntry(id, accessKeyRef.current));
     setActiveId((current) => (current === id ? null : current));
   };
 
@@ -323,10 +356,10 @@ export function App() {
   }, [backend, accessKey, library.entries, localLibrary, loadStudio]);
 
   const localPending = useMemo(() => {
-    if (backend !== "studio") return [];
+    if (backend !== "studio" || studioLibrary === null) return [];
     const inStudio = new Set(library.entries.map((e) => e.id));
     return localLibrary.entries.filter((e) => !inStudio.has(e.id));
-  }, [backend, library.entries, localLibrary.entries]);
+  }, [backend, studioLibrary, library.entries, localLibrary.entries]);
 
   const busy = pending !== null && pending.chatId === activeEntry?.id;
 
@@ -339,11 +372,11 @@ export function App() {
       onUnlocked={setAccessKey}
     />
   ) : (
-    <Hint mode={mode} status={status} backend={backend} storageFailed={storageFailed} studioError={studioError} />
+    <Hint mode={mode} status={status} backend={backend} loading={studioLoading} storageFailed={storageFailed} studioError={studioError} />
   );
 
   return (
-    <div className={`app${drawerOpen ? " drawer-open" : ""}`}>
+    <div className={`app${drawerOpen ? " drawer-open" : ""}`} data-pending={pendingCount > 0 ? "" : undefined}>
       <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       <Sidebar
         entries={library.entries}
@@ -381,14 +414,14 @@ export function App() {
               )}
             </div>
             <div className="dock">
-              <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={busy} onStop={stop} />
+              <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={busy} onStop={stop} held={studioLoading} />
               {footer}
             </div>
           </>
         ) : (
           <div className="welcome">
             <h1 className="welcome-title">Begin with either a chat or a thought.</h1>
-            <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={false} onStop={stop} autoFocus />
+            <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={false} onStop={stop} held={studioLoading} autoFocus />
             {footer}
           </div>
         )}
@@ -401,25 +434,26 @@ function Hint({
   mode,
   status,
   backend,
+  loading,
   storageFailed,
   studioError,
 }: {
   mode: Mode;
   status: ApiStatus;
   backend: Backend;
+  loading: boolean;
   storageFailed: boolean;
   studioError: string | null;
 }) {
   let lead = "";
   let rest = "";
-  const studioConfigured = status.state === "ready" && status.storage.configured;
   if (studioError) {
     lead = "The studio couldn't be reached.";
     rest = `${studioError} Until it is, new entries stay in this browser.`;
   } else if (storageFailed && backend === "browser") {
     lead = "Couldn't write to this browser's storage.";
     rest = "Entries won't survive a reload.";
-  } else if (studioConfigured && backend === "browser") {
+  } else if (loading) {
     rest = "Loading the studio…";
   } else if (mode === "save") {
     rest = backend === "studio" ? "Saved to the studio, shared across your devices." : "Saved entries stay in this browser.";

@@ -30,6 +30,7 @@ Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPI
 
 - GitHub: `alephantic/holographic`, branch `main`. Push with `GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin main` (the macOS keychain holds a stale credential for another account; `gh` is logged in as alephantic).
 - Vercel: account `mbu09a-8433`, team `mbu09a-gmailcoms-projects`, project `holographic`, production URL https://holographic-five.vercel.app. Not connected to GitHub (the Vercel account lacks access to the alephantic org).
+- Neon: org `org-sparkling-snow-75219709` ("Holographic", Free plan), project `super-boat-79001807`, branch `production`, database `neondb`, schema migrated. `.neon` (ignored) pins it; `neon.ts` declares only Postgres. The Neon CLI (`neon`, v9) needs Node ≥ 22.20: use `nvm use 22.23.4` (the default shell Node is still 22.15.0). `neon deploy` pulls `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` into `.env`, so local `npm run dev` currently talks to Neon; point `DATABASE_URL` at the Docker container (port 5433) to work locally instead. Neon agent skills are installed under `.claude/skills/` (uncommitted; owner to decide).
 
 ## Rules the owner has set
 
@@ -41,15 +42,15 @@ Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPI
 
 ## Where things stand (updated 2026-11-07, storage foundation checkpoint)
 
-Built and tested locally, not yet deployed; production still runs `9e7ffb5` (browser-only storage, shared access key):
+Built and tested, not yet deployed; production still runs `9e7ffb5` (browser-only storage, shared access key). Neon is provisioned and migrated (0 entries); the Vercel project does not have `DATABASE_URL` yet, so the live site still stores in the browser.
 
-- PostgreSQL storage foundation: schema + migration runner, repository, key-protected routes, client "studio" mode with browser fallback, "Send to studio" migration (preview, id matching, originals kept), server export route, `db:export`/`db:restore` scripts, Docker Compose local database. Independence test done: export from one database, restore twice into a fresh one, identical content hashes; pg_dump round trip.
+- PostgreSQL storage foundation: schema + migration runner, repository, key-protected routes, client "studio" mode (sending is held while the studio loads; browser store only when the studio fails; writes serialized, sent with keepalive, and exposed as `data-pending` on the app root), "Send to studio" migration (preview, id matching, originals kept), server export route, `db:export`/`db:restore` scripts (direct URL when present), Docker Compose local database. Independence test done: export from one database, restore twice into a fresh one, identical content hashes; pg_dump round trip. Storage suite also passes against a temporary test database on the Neon branch (create `holographic_test` on the branch, point `HOLOGRAPHIC_TEST_DATABASE_URL` at it, drop it after; never run it against `neondb`, its setup truncates).
 - Decided: PostgreSQL, Neon for the deployed app first, local Docker Postgres, tested path away from Neon. Cassandra stays a possible future experiment; not implemented. The memory experiment comes after this foundation is reviewed.
 
 Awaiting the owner at the checkpoint:
 
 1. **Access model** (not implemented; ask before implementing): per-person access keys mapped server-side to "Brennan" / "Maggie" with `author` recorded on entries and messages, in one shared studio; the open choice is default visibility (everyone sees everything vs. private by default with a share toggle). Until decided, the single shared key gates everything and `author` stays null.
-2. **Neon provisioning** (do not do without approval): Vercel dashboard → Storage → Create Database → Neon (free plan) → connect to project `holographic` → run `npm run db:migrate` with the injected connection string → then redeploy. Expected cost $0 (free plan is capped, not metered).
-3. **Deploy** of the current commit when asked; migrate real browser data only when asked (each browser sends its own entries, or export/import).
+2. **Wire Vercel to Neon** (do not do without approval): add `DATABASE_URL` (the pooled string from `.env`, as a Sensitive variable) to the Vercel project for Production, then deploy. Expected cost $0 (Neon free plan is capped, not metered).
+3. **Deploy** when asked; migrate real browser data only when asked (each browser sends its own entries, or export/import).
 
 Known gaps: assistant replies render as plain text (no Markdown); saved entries can't be edited in place; mobile checks used Chrome device emulation, not real iOS Safari; studio writes are optimistic (the hint reports a failed write but the view keeps what was typed).

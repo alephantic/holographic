@@ -47,6 +47,7 @@ export default defineConfig({
               ANTHROPIC_API_KEY: "",
               HOLOGRAPHIC_ACCESS_KEY: STUDIO_ACCESS_KEY,
               DATABASE_URL: STUDIO_DATABASE_URL,
+              DATABASE_URL_UNPOOLED: "",
             },
             reuseExistingServer: false,
             timeout: 60_000,
@@ -56,7 +57,8 @@ export default defineConfig({
     {
       command: `npx concurrently -k "vite --port ${WEB_PORT}" "tsx server/index.ts"`,
       url: `http://localhost:${WEB_PORT}`,
-      env: { PORT: String(API_PORT), OPENAI_API_KEY: "", ANTHROPIC_API_KEY: "", HOLOGRAPHIC_ACCESS_KEY: "" },
+      // Blank every service variable so a developer's .env (model key, database) can't leak into these servers.
+      env: { PORT: String(API_PORT), OPENAI_API_KEY: "", ANTHROPIC_API_KEY: "", HOLOGRAPHIC_ACCESS_KEY: "", DATABASE_URL: "", DATABASE_URL_UNPOOLED: "" },
       reuseExistingServer: false,
       timeout: 60_000,
     },
@@ -68,6 +70,8 @@ export default defineConfig({
         OPENAI_API_KEY: "sk-not-a-real-key",
         ANTHROPIC_API_KEY: "",
         HOLOGRAPHIC_ACCESS_KEY: LOCKED_ACCESS_KEY,
+        DATABASE_URL: "",
+        DATABASE_URL_UNPOOLED: "",
       },
       reuseExistingServer: false,
       timeout: 60_000,

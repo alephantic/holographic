@@ -3,7 +3,7 @@
 //   npm run db:restore -- backup.json
 // Restore adds entries whose ids are missing and skips the rest, so it is safe to repeat.
 import { readFile, writeFile } from "node:fs/promises";
-import { closePool, loadDotEnv, storageConfigured } from "../server/db/client.js";
+import { closePool, directDatabaseUrl, getPool, loadDotEnv, storageConfigured } from "../server/db/client.js";
 import { importEntries, listLibrary } from "../server/db/repository.js";
 import { isEntry } from "../shared/entries.js";
 
@@ -12,6 +12,7 @@ const [command, file] = process.argv.slice(2);
 async function main() {
   loadDotEnv();
   if (!storageConfigured()) throw new Error("DATABASE_URL is not set");
+  getPool(directDatabaseUrl()); // scripts use the direct connection when one is configured
   if (command === "export") {
     if (!file) throw new Error("Usage: npm run db:export -- <file.json>");
     const library = await listLibrary();

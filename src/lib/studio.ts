@@ -20,6 +20,8 @@ async function call<T>(path: string, key: string | null, init: RequestInit = {})
   try {
     res = await fetch(`/api${path}`, {
       ...init,
+      // Writes should finish even if the page is closed a moment later.
+      keepalive: init.method !== undefined && init.method !== "GET",
       headers: {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(key ? { [ACCESS_HEADER]: key } : {}),
