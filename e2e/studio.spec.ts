@@ -139,8 +139,12 @@ test("Send to studio previews, keeps ids and timestamps, leaves the originals, a
   await page.getByRole("button", { name: "Unlock" }).click();
   await loaded(page);
 
-  const send = page.getByRole("button", { name: "Send to studio (2)" });
+  await expect(page.getByText("This browser still holds 2 entries not in the studio.")).toBeVisible();
+  const send = page.getByRole("button", { name: "Send to studio" });
   await expect(send).toBeVisible();
+  // The originals can be backed up from here too.
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export them" }).click()]);
+  expect(download.suggestedFilename()).toMatch(/-this-browser\.json$/);
   await send.click();
   await expect(page.getByRole("group", { name: "Import preview" })).toContainText("2 entries to add.");
   await page.getByRole("button", { name: "Send 2" }).click();

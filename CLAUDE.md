@@ -17,7 +17,7 @@ One ChatGPT-style interface with two ways to begin: Chat (streams a model reply 
 
 ## Commands
 
-- `npm run dev` — client on :5173, API on :8787 (reads `.env`). `npm run db:up` / `db:migrate` / `db:export -- f.json` / `db:restore -- f.json` for the local database.
+- `npm run dev` — client on :5173, API on :8787, always against the local Docker database (port 5433) whatever `.env` says. `npm run dev:neon` uses `.env` (Neon) with remote access allowed; `npm run dev:browser` uses no database. Same pattern for `db:migrate`, `db:export -- f.json`, `db:restore -- f.json` and their `:neon` variants (`scripts/with-db.mjs`). The server refuses a remote database unless NODE_ENV=production, VERCEL=1, or HOLOGRAPHIC_ALLOW_REMOTE_DB=1.
 - `npm run check` — typecheck, unit tests, build. `npm run test:e2e` — browser tests.
 - `node scripts/screenshots.mjs` — screenshots at desktop and mobile widths (needs `npm run dev` running).
 - Deploy: `npx vercel@65.12.1 deploy --prod --yes` from this directory (project is linked; `.vercel/` is ignored). Pushing to GitHub does not deploy.
@@ -42,15 +42,14 @@ Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPI
 
 ## Where things stand (updated 2026-11-07, storage foundation checkpoint)
 
-Built and tested, not yet deployed; production still runs `9e7ffb5` (browser-only storage, shared access key). Neon is provisioned and migrated (0 entries); the Vercel project does not have `DATABASE_URL` yet, so the live site still stores in the browser.
+Access model decided 2026-11-07: one shared access key, one shared workspace, no accounts or per-person keys. Neon is provisioned, migrated, and wired into the Vercel project (`DATABASE_URL`, pooled, as a secret); production was deployed with studio storage on 2026-11-07. Gate audit: every content route plus chat, access check, and unknown /api paths return 401 without the key or with a wrong key; only /api/status is open and carries no content. Dev/test safeguards verified: plain scripts target Docker; the test suite refuses non-`_test` databases and remote ones without an opt-in. Exit path proven: 5 entries / 45 messages exported from a temporary Neon database, restored twice into fresh Docker Postgres with identical hashes, app read/write/delete against the copy with no Neon URL.
 
 - PostgreSQL storage foundation: schema + migration runner, repository, key-protected routes, client "studio" mode (sending is held while the studio loads; browser store only when the studio fails; writes serialized, sent with keepalive, and exposed as `data-pending` on the app root), "Send to studio" migration (preview, id matching, originals kept), server export route, `db:export`/`db:restore` scripts (direct URL when present), Docker Compose local database. Independence test done: export from one database, restore twice into a fresh one, identical content hashes; pg_dump round trip. Storage suite also passes against a temporary test database on the Neon branch (create `holographic_test` on the branch, point `HOLOGRAPHIC_TEST_DATABASE_URL` at it, drop it after; never run it against `neondb`, its setup truncates).
 - Decided: PostgreSQL, Neon for the deployed app first, local Docker Postgres, tested path away from Neon. Cassandra stays a possible future experiment; not implemented. The memory experiment comes after this foundation is reviewed.
 
 Awaiting the owner at the checkpoint:
 
-1. **Access model** (not implemented; ask before implementing): per-person access keys mapped server-side to "Brennan" / "Maggie" with `author` recorded on entries and messages, in one shared studio; the open choice is default visibility (everyone sees everything vs. private by default with a share toggle). Until decided, the single shared key gates everything and `author` stays null.
-2. **Wire Vercel to Neon** (do not do without approval): add `DATABASE_URL` (the pooled string from `.env`, as a Sensitive variable) to the Vercel project for Production, then deploy. Expected cost $0 (Neon free plan is capped, not metered).
-3. **Deploy** when asked; migrate real browser data only when asked (each browser sends its own entries, or export/import).
+1. **Migrate Brennan's browser entries**: he exports them ("Export them" beside "Send to studio", or Export in browser mode), then "Send to studio" with its preview; ask before importing real entries; verify afterwards. `author` columns stay null (no identity by decision).
+2. Then, only after review: the source-linked memory experiment.
 
 Known gaps: assistant replies render as plain text (no Markdown); saved entries can't be edited in place; mobile checks used Chrome device emulation, not real iOS Safari; studio writes are optimistic (the hint reports a failed write but the view keeps what was typed).

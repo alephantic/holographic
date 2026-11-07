@@ -25,12 +25,26 @@ npm run db:migrate            # uses DATABASE_URL from the environment or .env
 DATABASE_URL=... npm run db:migrate   # a specific database
 ```
 
+## Which database am I talking to?
+
+Routine commands never reach a hosted database by accident:
+
+| Command | Database |
+| --- | --- |
+| `npm run dev`, `npm run db:migrate`, `db:export`, `db:restore` | The local Docker container on port 5433, always, whatever `.env` says |
+| `npm run dev:browser` | None: entries stay in the browser |
+| `npm run dev:neon`, `db:migrate:neon`, `db:export:neon`, `db:restore:neon` | Whatever `DATABASE_URL` in `.env` says (Neon after `neon deploy`), with remote access explicitly allowed |
+
+The server refuses to open a connection to a non-local host unless it is running in production (Vercel) or `HOLOGRAPHIC_ALLOW_REMOTE_DB=1` is set, which the `:neon` scripts do for you. Running `tsx server/index.ts` by hand with a Neon URL in `.env` therefore exits with a message instead of connecting.
+
+The browser-test suite truncates its database on every run, so it accepts only databases whose name ends in `_test`, and a remote one only with `HOLOGRAPHIC_ALLOW_REMOTE_TEST_DB=1`. To run it against Neon on purpose, create a `holographic_test` database on the branch, point `HOLOGRAPHIC_TEST_DATABASE_URL` at it with that flag set, and drop the database afterwards. It can never run against `neondb`.
+
 ## Local database with Docker
 
 ```bash
 npm run db:up                 # starts postgres:17 with a persistent volume
 npm run db:migrate            # creates the tables
-npm run dev                   # with DATABASE_URL set in .env (see .env.example)
+npm run dev                   # talks to the container regardless of .env
 ```
 
 Data lives in the Docker volume `holographic-pgdata` and survives `npm run db:down`. To start from nothing: `docker compose down -v`. The container listens on port 5433 (not 5432) so it never collides with a Postgres already installed on the machine; set `HOLOGRAPHIC_DB_PORT` to change that, and keep `DATABASE_URL` in step. The container's password is for local use only.

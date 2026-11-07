@@ -348,6 +348,12 @@ button:disabled {
   padding-top: 2px;
 }
 
+.transfer-local {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 .text-button-primary {
   color: var(--fg);
   font-weight: 500;

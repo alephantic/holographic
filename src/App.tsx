@@ -385,7 +385,13 @@ export function App() {
         onSelect={openEntry}
         onNew={startNew}
         onClose={() => setDrawerOpen(false)}
-        footer={<Transfer target={transferTarget} localPending={localPending} />}
+        footer={
+          <Transfer
+            target={transferTarget}
+            localPending={localPending}
+            exportLocal={backend === "studio" ? async () => createExport(localLibrary) : undefined}
+          />
+        }
       />
 
       <main className="main" inert={drawerOpen}>

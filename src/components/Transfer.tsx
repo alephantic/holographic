@@ -15,6 +15,8 @@ interface Props {
   target: TransferTarget;
   /** Entries in this browser that the studio doesn't have yet; offered as "Send to studio". */
   localPending?: Entry[];
+  /** This browser's whole library, so it can be exported even while the studio is showing. */
+  exportLocal?: () => Promise<ExportDocument>;
 }
 
 type State =
@@ -24,7 +26,7 @@ type State =
   | { step: "error"; reason: string };
 
 /** Export, import with a preview, and (in the studio) send this browser's entries up. Entries match by id, so repeating adds nothing twice. */
-export function Transfer({ target, localPending = [] }: Props) {
+export function Transfer({ target, localPending = [], exportLocal }: Props) {
   const [state, setState] = useState<State>({ step: "idle" });
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,19 +42,20 @@ export function Transfer({ target, localPending = [] }: Props) {
     }
   };
 
-  const exportNow = () =>
-    run(async () => {
-      const now = new Date();
-      const doc = await target.exportDocument();
-      const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = exportFileName(now);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      return { step: "idle" };
-    });
+  const download = async (produce: () => Promise<ExportDocument>, suffix = "") => {
+    const now = new Date();
+    const doc = await produce();
+    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportFileName(now).replace(/\.json$/, `${suffix}.json`);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const exportNow = () => run(async () => (await download(target.exportDocument), { step: "idle" }));
+  const exportLocalNow = () => run(async () => (await download(exportLocal!, "-this-browser"), { step: "idle" }));
 
   const pick = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,13 +121,25 @@ export function Transfer({ target, localPending = [] }: Props) {
         <button type="button" className="text-button" onClick={() => fileRef.current?.click()} disabled={busy}>
           Import…
         </button>
-        {target.name === "studio" && localPending.length > 0 && (
-          <button type="button" className="text-button" onClick={sendLocal} disabled={busy}>
-            Send to studio ({localPending.length})
-          </button>
-        )}
         <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={pick} aria-label="Import file" />
       </div>
+      {target.name === "studio" && localPending.length > 0 && (
+        <div className="transfer-local">
+          <p className="transfer-text">
+            This browser still holds {localPending.length} {localPending.length === 1 ? "entry" : "entries"} not in the studio.
+          </p>
+          <div className="transfer-actions">
+            <button type="button" className="text-button text-button-primary" onClick={sendLocal} disabled={busy}>
+              Send to studio
+            </button>
+            {exportLocal && (
+              <button type="button" className="text-button" onClick={exportLocalNow} disabled={busy}>
+                Export them
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
