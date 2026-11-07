@@ -12,9 +12,16 @@ export interface ChatRequest {
   messages: ChatTurn[];
 }
 
-export type StatusResponse =
+export type StatusResponse = (
   | { configured: true; provider: "openai" | "anthropic"; model: string }
-  | { configured: false; provider: null; model: null };
+  | { configured: false; provider: null; model: null }
+) & {
+  /** True when chat requests must carry an access key (x-holographic-key). */
+  accessRequired: boolean;
+};
+
+/** Header carrying the shared access key, when one is configured. */
+export const ACCESS_HEADER = "x-holographic-key";
 
 /** Newline-delimited JSON events streamed back from POST /api/chat. */
 export type ChatEvent =
@@ -22,4 +29,4 @@ export type ChatEvent =
   | { type: "done" }
   | { type: "error"; code: ChatErrorCode; message: string };
 
-export type ChatErrorCode = "not_configured" | "bad_request" | "upstream" | "refusal";
+export type ChatErrorCode = "not_configured" | "unauthorized" | "bad_request" | "upstream" | "refusal";

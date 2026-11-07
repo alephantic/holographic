@@ -1,9 +1,9 @@
-import type { ChatEvent, ChatTurn, StatusResponse } from "../../shared/protocol";
+import { ACCESS_HEADER, type ChatEvent, type ChatTurn, type StatusResponse } from "../../shared/protocol";
 
 export type ApiStatus =
   | { state: "loading" }
-  | { state: "ready"; configured: true; model: string }
-  | { state: "ready"; configured: false; model: null }
+  | { state: "ready"; configured: true; model: string; accessRequired: boolean }
+  | { state: "ready"; configured: false; model: null; accessRequired: boolean }
   | { state: "unreachable" };
 
 export async function fetchStatus(signal?: AbortSignal): Promise<ApiStatus> {
@@ -12,10 +12,20 @@ export async function fetchStatus(signal?: AbortSignal): Promise<ApiStatus> {
     if (!res.ok) return { state: "unreachable" };
     const body = (await res.json()) as StatusResponse;
     return body.configured
-      ? { state: "ready", configured: true, model: body.model }
-      : { state: "ready", configured: false, model: null };
+      ? { state: "ready", configured: true, model: body.model, accessRequired: body.accessRequired }
+      : { state: "ready", configured: false, model: null, accessRequired: body.accessRequired };
   } catch {
     return { state: "unreachable" };
+  }
+}
+
+/** Checks an access key with the server. Resolves true when accepted. */
+export async function verifyAccessKey(key: string, signal?: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch("/api/access", { method: "POST", headers: { [ACCESS_HEADER]: key }, signal });
+    return res.status === 204;
+  } catch {
+    return false;
   }
 }
 
@@ -32,12 +42,13 @@ export async function streamChat(
   turns: ChatTurn[],
   onText: (chunk: string) => void,
   signal?: AbortSignal,
+  accessKey?: string | null,
 ): Promise<ChatFailure | null> {
   let res: Response;
   try {
     res = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(accessKey ? { [ACCESS_HEADER]: accessKey } : {}) },
       body: JSON.stringify({ messages: turns }),
       signal,
     });

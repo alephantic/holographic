@@ -21,6 +21,9 @@ export interface Provider {
   describeError(error: unknown): string;
 }
 
+/** Upper bound on reply length, so one request cannot run away. */
+const MAX_OUTPUT_TOKENS = 2_000;
+
 const DEFAULT_MODELS: Record<ProviderName, string> = {
   openai: "gpt-5",
   anthropic: "claude-opus-5-5",
@@ -47,6 +50,7 @@ function openAiProvider(model: string): Provider {
       const stream = await client.chat.completions.create({
         model,
         stream: true,
+        max_completion_tokens: MAX_OUTPUT_TOKENS,
         messages: [{ role: "system", content: system }, ...turns.map((t) => ({ role: t.role, content: t.content }))],
       });
       let finish: string | null | undefined;
@@ -78,7 +82,7 @@ function anthropicProvider(model: string): Provider {
       const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
       const stream = client.messages.stream({
         model,
-        max_tokens: 8_000,
+        max_tokens: MAX_OUTPUT_TOKENS,
         system,
         thinking: { type: "adaptive" },
         output_config: { effort: "low" },

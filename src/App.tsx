@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccessGate } from "./components/AccessGate";
 import { ChatView } from "./components/ChatView";
 import { Composer } from "./components/Composer";
 import { MenuIcon, ComposeIcon } from "./components/icons";
@@ -20,6 +21,24 @@ import {
 import type { ChatEntry, Entry, Library } from "./lib/types";
 
 const MODE_KEY = "holographic.mode";
+const ACCESS_KEY = "holographic.accessKey";
+
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* preference only */
+  }
+}
 
 function readMode(): Mode {
   try {
@@ -37,7 +56,11 @@ export function App() {
   const [status, setStatus] = useState<ApiStatus>({ state: "loading" });
   const [pending, setPending] = useState<{ chatId: string; text: string } | null>(null);
   const [storageFailed, setStorageFailed] = useState(false);
+  const [accessKey, setAccessKeyState] = useState<string | null>(() => readStored(ACCESS_KEY));
+  const [accessRefused, setAccessRefused] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const accessKeyRef = useRef(accessKey);
+  accessKeyRef.current = accessKey;
   const firstRender = useRef(true);
 
   // Persist the library whenever it changes (skip the initial load).
@@ -51,11 +74,13 @@ export function App() {
 
   const setMode = (next: Mode) => {
     setModeState(next);
-    try {
-      localStorage.setItem(MODE_KEY, next);
-    } catch {
-      /* preference only */
-    }
+    writeStored(MODE_KEY, next);
+  };
+
+  const setAccessKey = (next: string | null) => {
+    setAccessKeyState(next);
+    setAccessRefused(false);
+    writeStored(ACCESS_KEY, next);
   };
 
   // Ask the server whether a model is connected; re-check when the tab regains focus.
@@ -118,6 +143,7 @@ export function App() {
           setPending((p) => (p && p.chatId === chat.id ? { ...p, text: reply } : p));
         },
         controller.signal,
+        accessKeyRef.current,
       );
     } catch (error) {
       failure =
@@ -141,6 +167,12 @@ export function App() {
         return { ...c, messages };
       }),
     );
+    if (failure?.code === "unauthorized") {
+      // The stored key is no longer accepted (rotated or removed): ask again.
+      setAccessKeyState(null);
+      writeStored(ACCESS_KEY, null);
+      setAccessRefused(true);
+    }
     if (failure?.code === "not_configured" || failure?.code === "unreachable") void fetchStatus().then(setStatus);
   }, []);
 
@@ -165,6 +197,13 @@ export function App() {
   };
 
   const busy = pending !== null && pending.chatId === activeEntry?.id;
+
+  const needsKey = mode === "chat" && status.state === "ready" && status.configured && status.accessRequired && !accessKey;
+  const footer = needsKey ? (
+    <AccessGate reason={accessRefused ? "That access key is no longer accepted." : undefined} onUnlocked={setAccessKey} />
+  ) : (
+    <Hint mode={mode} status={status} storageFailed={storageFailed} />
+  );
 
   return (
     <div className={`app${drawerOpen ? " drawer-open" : ""}`}>
@@ -204,14 +243,14 @@ export function App() {
             </div>
             <div className="dock">
               <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={busy} onStop={stop} />
-              <Hint mode={mode} status={status} storageFailed={storageFailed} />
+              {footer}
             </div>
           </>
         ) : (
           <div className="welcome">
             <h1 className="welcome-title">Begin with either a chat or a thought.</h1>
             <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={false} onStop={stop} autoFocus />
-            <Hint mode={mode} status={status} storageFailed={storageFailed} />
+            {footer}
           </div>
         )}
       </main>

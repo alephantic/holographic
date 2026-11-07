@@ -22,6 +22,8 @@ npm run dev              # client on http://localhost:5173, API on :8787
 
 Without a key, the interface says so and Save still works. Nothing is ever faked: Chat only answers when a real model is connected.
 
+On a public deployment, also set `HOLOGRAPHIC_ACCESS_KEY`. Chat requests must then carry that key (the interface asks for it once and remembers it in the browser), so only people you share it with can spend the model credential. Per-request limits cap the size of any single call, and a spending limit on the model provider's side is the only hard ceiling, so set one there too.
+
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Run the client and the API server together, with reload |

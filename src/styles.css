@@ -689,6 +689,84 @@ button:disabled {
   color: var(--fg);
 }
 
+/* ---------- access gate ---------- */
+
+.gate {
+  width: 100%;
+  max-width: var(--column-width);
+  margin: 10px auto 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gate-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--fg-2);
+}
+
+.gate-text strong {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.gate-row {
+  display: flex;
+  gap: 6px;
+}
+
+.gate-input {
+  width: 200px;
+  max-width: 60vw;
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  outline: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.gate-input:focus-visible {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+  outline: none;
+}
+
+.gate-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.gate-button {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--accent);
+  color: var(--accent-fg);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.gate-button:disabled {
+  background: var(--bg-disabled);
+  color: var(--fg-disabled);
+}
+
+.gate-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
 /* ---------- motion ---------- */
 
 @keyframes fade-in {
