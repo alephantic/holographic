@@ -11,19 +11,20 @@ One ChatGPT-style interface with two ways to begin: Chat (streams a model reply 
 - Client: Vite + React 19 + TypeScript in `src/`. Styles in `src/styles.css` (light and dark via `prefers-color-scheme`, reduced motion respected).
 - Server: Hono in `server/` (`app.ts` is the app; `index.ts` runs it locally; `providers.ts` picks OpenAI or Anthropic from env; `access.ts` is the access-key gate; `chat.ts` the routes). `api/index.ts` exposes the same app as a Vercel function via `getRequestListener` (Vercel calls it Node-style; the Hono Vercel adapter hangs there, don't switch back).
 - Shared: `shared/protocol.ts` (wire types), `shared/limits.ts` (24 turns / 8,000 chars per message / 32,000 per request / 2,000 output tokens).
-- Data: entries live in the browser's localStorage as one versioned document (`src/lib/types.ts`, `src/lib/store.ts`). Samples in `src/lib/samples.ts` are never stored. Export/import in `src/lib/transfer.ts` matches entries by id.
-- Tests: Vitest units in `src/lib/*.test.ts`; Playwright in `e2e/` using the installed Chrome (`channel: "chrome"`), on its own ports with keys blanked, plus a second "locked" server pair for the access-key flow.
+- Data model: `shared/entries.ts` (types, validators, size caps). Two stores: the browser's localStorage document (`src/lib/store.ts`, always present, never deleted by the app) and, when `DATABASE_URL` is set, the shared "studio" in PostgreSQL. The client (`src/lib/studio.ts`, `src/App.tsx`) uses the studio when the server has storage and the browser is unlocked, otherwise the browser store. Samples in `src/lib/samples.ts` are never stored. Export/import in `src/lib/transfer.ts` matches entries by id.
+- Storage layer: `server/db/client.ts` (pg Pool from `DATABASE_URL`, TLS for non-local hosts, plain node-postgres, nothing Neon-specific), `server/db/migrate.ts` (applies `db/migrations/*.sql` once each), `server/db/repository.ts` (all SQL), `server/entries.ts` (routes under /api: entries, messages, import with dryRun, export). Docs in `db/README.md`. Local Postgres: `docker-compose.yml` on port 5433 (5432 is taken by a Homebrew Postgres 14 on this machine; its `pg_dump` is too old for the container, use `docker compose exec -T db pg_dump`).
+- Tests: Vitest units in `src/lib/*.test.ts`; Playwright in `e2e/` using the installed Chrome (`channel: "chrome"`), on its own ports with keys blanked, plus a "locked" server pair for the access-key flow, plus a "studio" project against real Postgres that runs only when `HOLOGRAPHIC_TEST_DATABASE_URL` is set (use `postgres://holographic:holographic@localhost:5433/holographic_test` after `npm run db:up`; its global setup migrates and truncates that database).
 
 ## Commands
 
-- `npm run dev` — client on :5173, API on :8787 (reads `.env`).
+- `npm run dev` — client on :5173, API on :8787 (reads `.env`). `npm run db:up` / `db:migrate` / `db:export -- f.json` / `db:restore -- f.json` for the local database.
 - `npm run check` — typecheck, unit tests, build. `npm run test:e2e` — browser tests.
 - `node scripts/screenshots.mjs` — screenshots at desktop and mobile widths (needs `npm run dev` running).
 - Deploy: `npx vercel@65.12.1 deploy --prod --yes` from this directory (project is linked; `.vercel/` is ignored). Pushing to GitHub does not deploy.
 
 ## Environment variables (names only; never print values)
 
-Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`), `HOLOGRAPHIC_MODEL` (currently gpt-6-luna), `HOLOGRAPHIC_ACCESS_KEY` (shared key the interface asks for once; Save works without it). Do not add `PORT` on Vercel.
+Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`), `HOLOGRAPHIC_MODEL` (currently gpt-6-luna), `HOLOGRAPHIC_ACCESS_KEY` (shared key the interface asks for once; it also gates all storage routes), `DATABASE_URL` (optional; unset means browser-only storage). Do not add `PORT` on Vercel.
 
 ## Accounts and places
 
@@ -38,15 +39,17 @@ Local `.env` (git-ignored) and Vercel Production: `OPENAI_API_KEY` (or `ANTHROPI
 - Work in stages; stop at the checkpoints below and report honestly what passed and what didn't.
 - Inspect existing code before deciding implementation details.
 
-## Where things stand (updated 2026-11-07)
+## Where things stand (updated 2026-11-07, storage foundation checkpoint)
 
-Done and pushed (`02cd19c`): the interface, access-key gate, bounded context window for long chats (with a visible divider), per-message limit in the composer, local Export/Import. Production is still running the previous commit (`9e7ffb5`); the owner has not yet asked for a redeploy.
+Built and tested locally, not yet deployed; production still runs `9e7ffb5` (browser-only storage, shared access key):
 
-Agreed plan, awaiting the owner's answers before any provisioning:
+- PostgreSQL storage foundation: schema + migration runner, repository, key-protected routes, client "studio" mode with browser fallback, "Send to studio" migration (preview, id matching, originals kept), server export route, `db:export`/`db:restore` scripts, Docker Compose local database. Independence test done: export from one database, restore twice into a fresh one, identical content hashes; pg_dump round trip.
+- Decided: PostgreSQL, Neon for the deployed app first, local Docker Postgres, tested path away from Neon. Cassandra stays a possible future experiment; not implemented. The memory experiment comes after this foundation is reviewed.
 
-1. **Stage 1, durable shared storage.** Recommended: Neon Postgres via the Vercel Marketplace (free plan, capped not metered; `DATABASE_URL` injected into the project as a secret; the server is the only database client). Access model proposed: one personal access key each for Brennan and Maggie (server maps key to person, author recorded on every entry and message), one shared studio workspace. Open questions for the owner: (a) go with Neon? (b) default visibility: everyone sees everything, or private by default with a share toggle later? (c) OK to replace the single shared key with two personal keys? Also planned: a key-protected export route for the whole studio and a restore command.
-2. **Stage 2, migration.** A "Send to studio" action beside Import that uploads a browser's local entries with the same preview and id matching; local originals are never deleted; each browser must migrate itself unless exported and imported elsewhere.
-3. **Checkpoint.** Report and stop before Stage 3.
-4. **Stage 3, only after approval.** A small source-linked memory experiment: plain search over a small set of material from one project, answers that show the retrieved sources and separate them from the model's interpretation, tested with known answers, an outdated idea, and a question whose answer isn't in the material. No vector database.
+Awaiting the owner at the checkpoint:
 
-Known gaps: assistant replies render as plain text (no Markdown); saved entries can't be edited in place; mobile checks used Chrome device emulation, not real iOS Safari.
+1. **Access model** (not implemented; ask before implementing): per-person access keys mapped server-side to "Brennan" / "Maggie" with `author` recorded on entries and messages, in one shared studio; the open choice is default visibility (everyone sees everything vs. private by default with a share toggle). Until decided, the single shared key gates everything and `author` stays null.
+2. **Neon provisioning** (do not do without approval): Vercel dashboard → Storage → Create Database → Neon (free plan) → connect to project `holographic` → run `npm run db:migrate` with the injected connection string → then redeploy. Expected cost $0 (free plan is capped, not metered).
+3. **Deploy** of the current commit when asked; migrate real browser data only when asked (each browser sends its own entries, or export/import).
+
+Known gaps: assistant replies render as plain text (no Markdown); saved entries can't be edited in place; mobile checks used Chrome device emulation, not real iOS Safari; studio writes are optimistic (the hint reports a failed write but the view keeps what was typed).

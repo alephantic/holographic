@@ -4,11 +4,13 @@ import { verifyAccessKey } from "../lib/api";
 interface Props {
   /** Shown when a stored key was refused, e.g. after it was rotated. */
   reason?: string;
+  /** What the key unlocks: just Chat, or the shared studio storage too. */
+  scope: "chat" | "studio";
   onUnlocked: (key: string) => void;
 }
 
 /** One-time entry of the shared access key that lets this browser use Chat. */
-export function AccessGate({ reason, onUnlocked }: Props) {
+export function AccessGate({ reason, scope, onUnlocked }: Props) {
   const [key, setKey] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,8 @@ export function AccessGate({ reason, onUnlocked }: Props) {
   return (
     <form className="gate" onSubmit={submit} aria-label="Access key">
       <p className="gate-text">
-        <strong>{reason ?? "Chat needs an access key."}</strong> Save works without one.
+        <strong>{reason ?? (scope === "studio" ? "The studio needs an access key." : "Chat needs an access key.")}</strong>{" "}
+        {scope === "studio" ? "Until then, entries stay in this browser." : "Save works without one."}
       </p>
       <div className="gate-row">
         <input

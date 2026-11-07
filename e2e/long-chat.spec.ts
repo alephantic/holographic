@@ -34,7 +34,7 @@ test("a long chat keeps every message but sends only a bounded window", async ({
     sent = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: "text/plain", body: '{"type":"text","text":"Still here."}\n{"type":"done"}\n' });
   });
-  await page.route("**/api/status", (r) => r.fulfill({ json: { configured: true, provider: "openai", model: "test", accessRequired: false } }));
+  await page.route("**/api/status", (r) => r.fulfill({ json: { configured: true, provider: "openai", model: "test", accessRequired: false, storage: { configured: false } } }));
   await page.reload();
   const menu = page.getByRole("button", { name: "Open sidebar" });
   if (await menu.isVisible()) await menu.click();

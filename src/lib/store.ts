@@ -1,3 +1,4 @@
+import { isEntry } from "../../shared/entries";
 import type { ChatEntry, Entry, Library, MessageRecord, SavedEntry } from "./types";
 
 export const STORAGE_KEY = "holographic.library.v1";
@@ -26,16 +27,6 @@ export function deriveTitle(text: string, max = 56): string {
   const cut = line.slice(0, max);
   const atWord = cut.lastIndexOf(" ");
   return `${(atWord > max * 0.6 ? cut.slice(0, atWord) : cut).trimEnd()}…`;
-}
-
-function isEntry(value: unknown): value is Entry {
-  if (!value || typeof value !== "object") return false;
-  const e = value as Record<string, unknown>;
-  if (typeof e.id !== "string" || typeof e.title !== "string") return false;
-  if (typeof e.createdAt !== "string" || typeof e.updatedAt !== "string") return false;
-  if (e.kind === "saved") return typeof e.body === "string";
-  if (e.kind === "chat") return Array.isArray(e.messages);
-  return false;
 }
 
 export function loadLibrary(storage: KeyValueStorage): Library {

@@ -317,8 +317,13 @@ button:disabled {
 
 .transfer-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 0 4px;
+}
+
+.transfer-actions .text-button {
+  white-space: nowrap;
 }
 
 .transfer-text {

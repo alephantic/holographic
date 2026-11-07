@@ -3,6 +3,7 @@ import { streamText } from "hono/streaming";
 import { MAX_CHARS_PER_REQUEST, MAX_CHARS_PER_TURN, MAX_TURNS } from "../shared/limits.js";
 import { ACCESS_HEADER, type ChatEvent, type ChatRequest, type ChatTurn, type StatusResponse } from "../shared/protocol.js";
 import { accessGranted, accessKeyRequired } from "./access.js";
+import { storageConfigured } from "./db/client.js";
 import { selectProvider } from "./providers.js";
 
 const SYSTEM_PROMPT =
@@ -47,9 +48,10 @@ export const chatApp = new Hono();
 chatApp.get("/status", (c) => {
   const provider = selectProvider();
   const accessRequired = accessKeyRequired();
+  const storage = { configured: storageConfigured() };
   const status: StatusResponse = provider
-    ? { configured: true, provider: provider.name, model: provider.model, accessRequired }
-    : { configured: false, provider: null, model: null, accessRequired };
+    ? { configured: true, provider: provider.name, model: provider.model, accessRequired, storage }
+    : { configured: false, provider: null, model: null, accessRequired, storage };
   return c.json(status);
 });
 

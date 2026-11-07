@@ -1,3 +1,4 @@
+import { isEntry } from "../../shared/entries";
 import type { Entry, Library } from "./types";
 
 // Export and import of the local library as a single JSON document. The file
@@ -25,16 +26,6 @@ export function createExport(library: Library, now = new Date()): ExportDocument
 
 export function exportFileName(now = new Date()): string {
   return `holographic-export-${now.toISOString().slice(0, 10)}.json`;
-}
-
-function isEntry(value: unknown): value is Entry {
-  if (!value || typeof value !== "object") return false;
-  const e = value as Record<string, unknown>;
-  if (typeof e.id !== "string" || typeof e.title !== "string") return false;
-  if (typeof e.createdAt !== "string" || typeof e.updatedAt !== "string") return false;
-  if (e.kind === "saved") return typeof e.body === "string";
-  if (e.kind === "chat") return Array.isArray(e.messages);
-  return false;
 }
 
 export type ParsedExport = { ok: true; entries: Entry[]; exportedAt: string | null } | { ok: false; reason: string };

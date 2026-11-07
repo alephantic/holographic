@@ -2,8 +2,8 @@ import { ACCESS_HEADER, type ChatEvent, type ChatTurn, type StatusResponse } fro
 
 export type ApiStatus =
   | { state: "loading" }
-  | { state: "ready"; configured: true; model: string; accessRequired: boolean }
-  | { state: "ready"; configured: false; model: null; accessRequired: boolean }
+  | { state: "ready"; configured: true; model: string; accessRequired: boolean; storage: { configured: boolean } }
+  | { state: "ready"; configured: false; model: null; accessRequired: boolean; storage: { configured: boolean } }
   | { state: "unreachable" };
 
 export async function fetchStatus(signal?: AbortSignal): Promise<ApiStatus> {
@@ -11,9 +11,10 @@ export async function fetchStatus(signal?: AbortSignal): Promise<ApiStatus> {
     const res = await fetch("/api/status", { signal });
     if (!res.ok) return { state: "unreachable" };
     const body = (await res.json()) as StatusResponse;
+    const storage = body.storage ?? { configured: false };
     return body.configured
-      ? { state: "ready", configured: true, model: body.model, accessRequired: body.accessRequired }
-      : { state: "ready", configured: false, model: null, accessRequired: body.accessRequired };
+      ? { state: "ready", configured: true, model: body.model, accessRequired: body.accessRequired, storage }
+      : { state: "ready", configured: false, model: null, accessRequired: body.accessRequired, storage };
   } catch {
     return { state: "unreachable" };
   }

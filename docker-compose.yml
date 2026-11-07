@@ -1,0 +1,24 @@
+# Local PostgreSQL for Holographic, with data kept in a named volume so it
+# survives restarts. The password below is for this local container only;
+# real deployments get their connection string from the host's environment.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: holographic-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: holographic
+      POSTGRES_PASSWORD: holographic
+      POSTGRES_DB: holographic
+    ports:
+      - "${HOLOGRAPHIC_DB_PORT:-5433}:5432"
+    volumes:
+      - holographic-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holographic -d holographic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  holographic-pgdata:

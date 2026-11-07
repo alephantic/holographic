@@ -28,9 +28,12 @@ On a public deployment, also set `HOLOGRAPHIC_ACCESS_KEY`. Chat requests must th
 | --- | --- |
 | `npm run dev` | Run the client and the API server together, with reload |
 | `npm run check` | Typecheck, unit tests, and a production build |
-| `npm run test:e2e` | Browser tests (uses the Chrome already installed on the machine) |
+| `npm run test:e2e` | Browser tests (uses the Chrome already installed on the machine); set `HOLOGRAPHIC_TEST_DATABASE_URL` to also run the storage tests against a real Postgres |
+| `npm run db:up`, `db:migrate`, `db:export`, `db:restore` | Local database: start it, apply migrations, back up to or restore from a JSON file |
 | `npm run build` then `npm start` | Serve the built client and API from one process |
 | `node scripts/screenshots.mjs` | Capture the main screens at desktop and mobile widths |
+
+Shared storage is optional. With `DATABASE_URL` set (a local Docker Postgres via `npm run db:up`, or a hosted one such as Neon), entries are kept in that database and shared across devices; the browser's own entries stay where they are and can be sent up with one click. Schema, migrations, local setup, and export/restore are described in `db/README.md`.
 
 Two details worth knowing. A chat keeps every message, but only a recent window (at most 24 turns, 8,000 characters per message, 32,000 per request, set in `shared/limits.ts`) is sent with each new reply; the interface draws a line where that window begins. And the sidebar's Export writes all entries to a JSON file that Import can read back, matching entries by id so repeating an import adds nothing twice.
 

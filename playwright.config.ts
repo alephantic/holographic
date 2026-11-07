@@ -11,6 +11,12 @@ const API_PORT = 8788;
 export const LOCKED_WEB_PORT = 5175;
 const LOCKED_API_PORT = 8789;
 export const LOCKED_ACCESS_KEY = "studio-test-key";
+// A third pair runs against a real PostgreSQL database when
+// HOLOGRAPHIC_TEST_DATABASE_URL is set (see db/README.md), behind an access key.
+export const STUDIO_WEB_PORT = 5178;
+const STUDIO_API_PORT = 8794;
+export const STUDIO_ACCESS_KEY = "studio-db-key";
+export const STUDIO_DATABASE_URL = process.env.HOLOGRAPHIC_TEST_DATABASE_URL;
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -21,11 +27,32 @@ export default defineConfig({
     channel: "chrome",
     trace: "retain-on-failure",
   },
+  globalSetup: STUDIO_DATABASE_URL ? "./e2e/studio.setup.ts" : undefined,
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" } },
-    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" } },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /studio\.spec/ },
+    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" }, testIgnore: /studio\.spec/ },
+    ...(STUDIO_DATABASE_URL
+      ? [{ name: "studio", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testMatch: /studio\.spec/ }]
+      : []),
   ],
   webServer: [
+    ...(STUDIO_DATABASE_URL
+      ? [
+          {
+            command: `npx concurrently -k "vite --port ${STUDIO_WEB_PORT}" "tsx server/index.ts"`,
+            url: `http://localhost:${STUDIO_WEB_PORT}`,
+            env: {
+              PORT: String(STUDIO_API_PORT),
+              OPENAI_API_KEY: "sk-not-a-real-key",
+              ANTHROPIC_API_KEY: "",
+              HOLOGRAPHIC_ACCESS_KEY: STUDIO_ACCESS_KEY,
+              DATABASE_URL: STUDIO_DATABASE_URL,
+            },
+            reuseExistingServer: false,
+            timeout: 60_000,
+          },
+        ]
+      : []),
     {
       command: `npx concurrently -k "vite --port ${WEB_PORT}" "tsx server/index.ts"`,
       url: `http://localhost:${WEB_PORT}`,

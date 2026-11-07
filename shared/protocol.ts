@@ -16,8 +16,10 @@ export type StatusResponse = (
   | { configured: true; provider: "openai" | "anthropic"; model: string }
   | { configured: false; provider: null; model: null }
 ) & {
-  /** True when chat requests must carry an access key (x-holographic-key). */
+  /** True when chat and storage requests must carry an access key (x-holographic-key). */
   accessRequired: boolean;
+  /** Whether the server has shared "studio" storage (a database) behind it. */
+  storage: { configured: boolean };
 };
 
 /** Header carrying the shared access key, when one is configured. */

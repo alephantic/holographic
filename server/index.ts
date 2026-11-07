@@ -1,18 +1,11 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { existsSync } from "node:fs";
 import { app } from "./app.js";
+import { loadDotEnv, storageConfigured } from "./db/client.js";
 import { selectProvider } from "./providers.js";
 
-// Load .env if present (Node 20.12+/22 built-in; no dotenv dependency).
-// Variables already set in the environment take precedence.
-if (existsSync(".env")) {
-  try {
-    process.loadEnvFile(".env");
-  } catch (error) {
-    console.warn("Could not read .env:", error);
-  }
-}
+// Load .env if present; variables already set in the environment take precedence.
+loadDotEnv();
 
 const port = Number(process.env.PORT ?? 8787);
 
@@ -27,6 +20,6 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(
     `Holographic API on http://localhost:${info.port} — ${
       provider ? `${provider.name} · ${provider.model}` : "no model configured (Save still works)"
-    }`,
+    } · storage ${storageConfigured() ? "database" : "browser only"}`,
   );
 });

@@ -16,19 +16,26 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:export": "tsx scripts/db-transfer.ts export",
+    "db:restore": "tsx scripts/db-transfer.ts restore"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
     "@hono/node-server": "^2.1.6",
     "hono": "^4.13.16",
     "openai": "^7.53.0",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
