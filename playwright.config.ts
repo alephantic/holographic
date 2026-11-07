@@ -31,10 +31,10 @@ export default defineConfig({
   },
   globalSetup: STUDIO_DATABASE_URL ? "./e2e/studio.setup.ts" : undefined,
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /(studio|memory)\.spec/ },
-    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" }, testIgnore: /(studio|memory|gate)\.spec/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testIgnore: /(studio|memory|project-memory)\.spec/ },
+    { name: "mobile", use: { ...devices["Pixel 7"], channel: "chrome" }, testIgnore: /(studio|memory|project-memory|gate)\.spec/ },
     ...(STUDIO_DATABASE_URL
-      ? [{ name: "studio", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testMatch: /(studio|memory)\.spec/ }]
+      ? [{ name: "studio", use: { ...devices["Desktop Chrome"], channel: "chrome" }, testMatch: /(studio|memory|project-memory)\.spec/ }]
       : []),
   ],
   webServer: [
@@ -50,6 +50,8 @@ export default defineConfig({
               HOLOGRAPHIC_ACCESS_KEY: STUDIO_ACCESS_KEY,
               DATABASE_URL: STUDIO_DATABASE_URL,
               DATABASE_URL_UNPOOLED: "",
+              // Deterministic stand-in for the model (replies and memory proposals), see server/providers.ts.
+              HOLOGRAPHIC_TEST_PROVIDER: "1",
               // Only honoured when the global setup has also accepted a remote *_test database.
               HOLOGRAPHIC_ALLOW_REMOTE_DB: process.env.HOLOGRAPHIC_ALLOW_REMOTE_TEST_DB === "1" ? "1" : "",
             },

@@ -1,6 +1,7 @@
 import { ACCESS_HEADER } from "../../shared/protocol";
 import type { ExportDocument } from "./transfer";
 import type { ChatEntry, Entry, Library, MessageRecord } from "./types";
+import type { Memory, MemoryEvent, Project } from "../../shared/memory";
 
 // Client for the server's studio storage routes. Every call carries the
 // access key when one is in use; the database itself is never reachable
@@ -56,4 +57,19 @@ export const studio = {
   importEntries: (entries: Entry[], dryRun: boolean, key: string | null) =>
     call<{ added: string[]; skipped: string[] }>("/import", key, { method: "POST", body: JSON.stringify({ entries, dryRun }) }),
   fetchExport: (key: string | null) => call<ExportDocument>("/export", key),
+
+  // Project memory
+  fetchProject: (key: string | null) => call<{ project: Project; memories: Memory[] }>("/project", key),
+  capture: (entryId: string, key: string | null) =>
+    call<{ proposed: Memory[]; adjustments: Record<string, string>; considered: number }>("/project/capture", key, {
+      method: "POST",
+      body: JSON.stringify({ entryId }),
+    }),
+  acceptMemory: (id: string, text: string | undefined, note: string | undefined, key: string | null) =>
+    call<{ memory: Memory }>(`/memories/${encodeURIComponent(id)}/accept`, key, { method: "POST", body: JSON.stringify({ text, note }) }).then((r) => r.memory),
+  rejectMemory: (id: string, note: string | undefined, key: string | null) =>
+    call<{ memory: Memory }>(`/memories/${encodeURIComponent(id)}/reject`, key, { method: "POST", body: JSON.stringify({ note }) }).then((r) => r.memory),
+  correctMemory: (id: string, text: string, kind: "decision" | "open" | undefined, note: string | undefined, key: string | null) =>
+    call<{ memory: Memory }>(`/memories/${encodeURIComponent(id)}/correct`, key, { method: "POST", body: JSON.stringify({ text, kind, note }) }).then((r) => r.memory),
+  memoryHistory: (id: string, key: string | null) => call<{ memory: Memory; events: MemoryEvent[] }>(`/memories/${encodeURIComponent(id)}/history`, key),
 };

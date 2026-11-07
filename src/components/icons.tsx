@@ -73,3 +73,10 @@ export const CloseIcon = (p: IconProps) => (
     <path d="m6 6 12 12M18 6 6 18" />
   </svg>
 );
+
+export const MemoryIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 6.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12l-4-2.5-3 2-3-2-4 2.5v-12Z" />
+    <path d="M9 9.5h6M9 12.5h4" />
+  </svg>
+);

@@ -7,6 +7,7 @@ import type { Mode } from "./components/ModeSelect";
 import { SavedView } from "./components/SavedView";
 import { Sidebar } from "./components/Sidebar";
 import { Transfer, type TransferTarget } from "./components/Transfer";
+import { MemoryView } from "./components/MemoryView";
 import { selectContext } from "./lib/context";
 import { fetchStatus, streamChat, type ApiStatus } from "./lib/api";
 import { SAMPLE_ENTRIES } from "./lib/samples";
@@ -23,7 +24,8 @@ import {
 import { studio, StudioError } from "./lib/studio";
 import { applyMerge, createExport, planMerge, type MergePreview } from "./lib/transfer";
 import type { ChatEntry, Entry, Library, MessageRecord } from "./lib/types";
-import type { SourceRef } from "../shared/entries";
+import type { MemoryRefLite, SourceRef } from "../shared/entries";
+import type { Memory } from "../shared/memory";
 
 const MODE_KEY = "holographic.mode";
 const ACCESS_KEY = "holographic.accessKey";
@@ -67,6 +69,13 @@ export function App() {
   const [storageFailed, setStorageFailed] = useState(false);
   const [accessKey, setAccessKeyState] = useState<string | null>(() => readStored(ACCESS_KEY));
   const [accessRefused, setAccessRefused] = useState(false);
+  // Project memory (studio only).
+  const [view, setView] = useState<"entry" | "memory">("entry");
+  const [memories, setMemories] = useState<Memory[] | null>(null);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryHighlight, setMemoryHighlight] = useState<string | null>(null);
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
+  const [captureState, setCaptureState] = useState<"idle" | "working" | "done">("idle");
   const abortRef = useRef<AbortController | null>(null);
   const accessKeyRef = useRef(accessKey);
   accessKeyRef.current = accessKey;
@@ -155,16 +164,27 @@ export function App() {
     [reportStudio],
   );
 
+  const loadMemories = useCallback(async () => {
+    try {
+      const r = await studio.fetchProject(accessKeyRef.current);
+      setMemories(r.memories);
+      setMemoryError(null);
+    } catch (error) {
+      setMemoryError(error instanceof Error ? error.message : "Couldn't load the project memory.");
+    }
+  }, []);
+
   const loadStudio = useCallback(async () => {
     try {
       const lib = await studio.fetchLibrary(accessKeyRef.current);
       setStudioLibrary(lib);
       setStudioError(null);
+      void loadMemories();
     } catch (error) {
       setStudioLibrary(null);
       reportStudio(error);
     }
-  }, [reportStudio]);
+  }, [reportStudio, loadMemories]);
 
   // Ask the server what it offers; re-check (and refresh the studio) when the tab regains focus.
   useEffect(() => {
@@ -243,14 +263,49 @@ export function App() {
     return library.entries.find((e) => e.id === activeId) ?? SAMPLE_ENTRIES.find((e) => e.id === activeId) ?? null;
   }, [activeId, library.entries]);
 
-  const openEntry = (id: string) => {
+  const openEntry = (id: string, messageId: string | null = null) => {
     setActiveId(id);
+    setView("entry");
+    setHighlightMessageId(messageId);
+    setCaptureState("idle");
     setDrawerOpen(false);
   };
 
   const startNew = () => {
     setActiveId(null);
+    setView("entry");
+    setHighlightMessageId(null);
     setDrawerOpen(false);
+  };
+
+  const openMemory = (highlightId: string | null = null) => {
+    setView("memory");
+    setMemoryHighlight(highlightId);
+    setDrawerOpen(false);
+    void loadMemories();
+  };
+
+  const memoryAction = async (work: () => Promise<unknown>) => {
+    try {
+      await work();
+      setMemoryError(null);
+    } catch (error) {
+      setMemoryError(error instanceof Error ? error.message : "The change couldn't be saved.");
+    }
+    await loadMemories();
+  };
+
+  const captureChat = async (chatId: string) => {
+    setCaptureState("working");
+    try {
+      await studio.capture(chatId, accessKeyRef.current);
+      setCaptureState("done");
+      await loadMemories();
+    } catch (error) {
+      setCaptureState("idle");
+      setMemoryError(error instanceof Error ? error.message : "Nothing could be proposed.");
+      setView("memory");
+    }
   };
 
   const stop = () => abortRef.current?.abort();
@@ -263,6 +318,7 @@ export function App() {
 
       let reply = "";
       let sources: SourceRef[] | undefined;
+      let memoryRefs: MemoryRefLite[] | undefined;
       let failure: { code: string; message: string } | null = null;
       // Only a bounded window of recent messages goes to the model; the whole chat stays stored.
       const context = selectContext(chat.messages);
@@ -278,6 +334,9 @@ export function App() {
           accessKeyRef.current,
           (found) => {
             sources = found;
+          },
+          (cited) => {
+            memoryRefs = cited;
           },
         );
       } catch (error) {
@@ -296,6 +355,7 @@ export function App() {
         const assistant = makeMessage("assistant", reply);
         if (failure) assistant.note = failure.message;
         if (sources) assistant.sources = sources;
+        if (memoryRefs && memoryRefs.length > 0) assistant.memoryRefs = memoryRefs;
         appendMessage(chat.id, assistant);
       } else if (failure) {
         const last = chat.messages[chat.messages.length - 1];
@@ -308,6 +368,7 @@ export function App() {
   );
 
   const submit = (text: string) => {
+    if (view === "memory") setView("entry");
     if (mode === "save") {
       const entry = createSavedEntry(text);
       addEntry(entry);
@@ -391,6 +452,11 @@ export function App() {
         onSelect={openEntry}
         onNew={startNew}
         onClose={() => setDrawerOpen(false)}
+        memory={
+          backend === "studio"
+            ? { active: view === "memory", toReview: (memories ?? []).filter((m) => m.status === "suggested").length, onOpen: () => openMemory() }
+            : undefined
+        }
         footer={
           <Transfer
             target={transferTarget}
@@ -411,7 +477,27 @@ export function App() {
           </button>
         </header>
 
-        {activeEntry ? (
+        {view === "memory" && backend === "studio" ? (
+          <>
+            <div className="content" key="memory">
+              <MemoryView
+                memories={memories ?? []}
+                loading={memories === null}
+                error={memoryError}
+                highlightId={memoryHighlight}
+                onAccept={(id, text, note) => memoryAction(() => studio.acceptMemory(id, text, note, accessKeyRef.current))}
+                onReject={(id, note) => memoryAction(() => studio.rejectMemory(id, note, accessKeyRef.current))}
+                onCorrect={(id, text, kind, note) => memoryAction(() => studio.correctMemory(id, text, kind, note, accessKeyRef.current))}
+                onOpenSource={(entryId, messageId) => openEntry(entryId, messageId)}
+                loadHistory={(id) => studio.memoryHistory(id, accessKeyRef.current).then((r) => r.events)}
+              />
+            </div>
+            <div className="dock">
+              <Composer mode={mode} onModeChange={setMode} onSubmit={submit} busy={false} onStop={stop} held={studioLoading} />
+              {footer}
+            </div>
+          </>
+        ) : activeEntry ? (
           <>
             <div className="content" key={activeEntry.id}>
               {activeEntry.kind === "chat" ? (
@@ -421,6 +507,10 @@ export function App() {
                   contextStart={activeEntry.sample ? 0 : (selectContext(activeEntry.messages)?.startIndex ?? 0)}
                   onDelete={deleteEntry}
                   onOpenSource={openEntry}
+                  onOpenMemory={(id) => openMemory(id)}
+                  onCapture={backend === "studio" ? () => void captureChat(activeEntry.id) : undefined}
+                  captureState={captureState}
+                  highlightMessageId={highlightMessageId}
                 />
               ) : (
                 <SavedView entry={activeEntry} onDelete={deleteEntry} />
@@ -477,7 +567,7 @@ function Hint({
     lead = "No model connected.";
     rest = "Add OPENAI_API_KEY or ANTHROPIC_API_KEY to the server's .env to chat. Save works without it.";
   } else if (status.state === "ready") {
-    rest = `Replies come from ${status.model}.${backend === "studio" ? " Saved pages are searched for each question; chats are kept in the studio." : ""}`;
+    rest = `Replies come from ${status.model}.${backend === "studio" ? " Saved pages and accepted project memory are given with each question; chats are kept in the studio." : ""}`;
   }
   return (
     <p className="hint" role="status">

@@ -1,4 +1,4 @@
-import type { SourceRef } from "../../shared/entries";
+import type { MemoryRefLite, SourceRef } from "../../shared/entries";
 import { ACCESS_HEADER, type ChatEvent, type ChatTurn, type StatusResponse } from "../../shared/protocol";
 
 export type ApiStatus =
@@ -46,6 +46,7 @@ export async function streamChat(
   signal?: AbortSignal,
   accessKey?: string | null,
   onSources?: (sources: SourceRef[]) => void,
+  onMemories?: (memories: MemoryRefLite[]) => void,
 ): Promise<ChatFailure | null> {
   let res: Response;
   try {
@@ -85,6 +86,7 @@ export async function streamChat(
       const event = JSON.parse(line) as ChatEvent;
       if (event.type === "text") onText(event.text);
       else if (event.type === "sources") onSources?.(event.sources);
+      else if (event.type === "memories") onMemories?.(event.memories);
       else if (event.type === "error") return { code: event.code, message: event.message };
       else if (event.type === "done") return null;
     }

@@ -28,7 +28,7 @@ export default async function globalSetup() {
   const pool = new pg.Pool({ connectionString: url, ssl: isLocalHost(url) ? undefined : { rejectUnauthorized: true } });
   try {
     await migrate(pool);
-    await pool.query("truncate messages, entries");
+    await pool.query("truncate memory_events, memories, projects, messages, entries");
   } finally {
     await pool.end();
   }

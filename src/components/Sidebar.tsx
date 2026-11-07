@@ -1,5 +1,5 @@
 import type { Entry } from "../lib/types";
-import { BookmarkIcon, ChatIcon, CloseIcon, ComposeIcon } from "./icons";
+import { BookmarkIcon, ChatIcon, CloseIcon, ComposeIcon, MemoryIcon } from "./icons";
 import type { ReactNode } from "react";
 
 interface Props {
@@ -11,9 +11,11 @@ interface Props {
   onClose: () => void;
   /** Export / import controls, rendered at the foot of the sidebar. */
   footer?: ReactNode;
+  /** Project memory entry point; present only when the studio is active. */
+  memory?: { active: boolean; toReview: number; onOpen: () => void };
 }
 
-export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose, footer }: Props) {
+export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose, footer, memory }: Props) {
   return (
     <nav className="sidebar" aria-label="Sidebar">
       <div className="sidebar-top">
@@ -27,6 +29,14 @@ export function Sidebar({ entries, samples, activeId, onSelect, onNew, onClose, 
         <ComposeIcon size={16} />
         <span>New</span>
       </button>
+
+      {memory && (
+        <button type="button" className="sidebar-new" aria-current={memory.active ? "page" : undefined} onClick={memory.onOpen}>
+          <MemoryIcon size={16} />
+          <span>Project memory</span>
+          {memory.toReview > 0 && <span className="sidebar-badge">{memory.toReview}</span>}
+        </button>
+      )}
 
       <div className="sidebar-scroll">
         <section className="sidebar-section" aria-labelledby="recents-heading">

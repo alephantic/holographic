@@ -79,3 +79,15 @@ When studio storage is configured, every chat question is also run as a search o
 3. The stream's first event lists the sources that were quoted (`{type: "sources"}`), the reply records them on the assistant message (`messages.sources`, migration 0002), and the interface shows them as clickable chips that open the saved entry. An empty list is shown as "No saved pages matched this question."
 
 Page numbers come only from the entry's heading (`… — Page 5`); an entry without one is labelled by its title. `GET /api/search?q=` (key required) shows what a question would retrieve. Nothing from a reply is ever written back into a saved entry, and nothing is remembered across chats beyond what is stored in the chat itself.
+
+## Project memory (first experiment)
+
+Tables from migration 0003: `projects` (one row, `default`, for now), `memories`, and `memory_events`; plus `messages.memory_refs`, the accepted memories an assistant reply cited.
+
+A memory is a one-sentence **decision** or **open** item (idea or question), tied to one source message by `source_entry_id`, `source_message_id`, and a verbatim `source_quote`. `attributed_to` records whose words the quote is: `person`, `assistant`, or `quoted` (text the person pasted, such as a story page). `status` is `suggested` until someone accepts or rejects it; a correction to an accepted memory inserts a new accepted row with `supersedes` pointing at the old one, which becomes `superseded`. `original_text` never changes, and every step is a row in `memory_events`.
+
+How it moves: "Remember this chat" (`POST /api/project/capture`) sends the conversation, with message ids, to the model and asks for candidates as JSON (one model call). The server then validates each one: the message must exist, the quote must appear verbatim in it, and whoever said it decides what it may be. The assistant's words and quoted text can never become a decision; they are kept as open items, labelled "AI suggestion" or "quoted text", with the adjustment noted in the capture response. Only accepted memories reach a chat: they are given to the model in a labelled block (`[MD1] DECISION: …`, `[MO1] OPEN: …`, with the source entry and attribution), capped at 4,000 characters, with rules to keep decisions apart from open questions, to cite labels, to say when something isn't established, and to mark any next step as a suggestion. The labels a reply cites are stored on the message and shown as chips.
+
+Routes (key required): `GET /api/project`, `POST /api/project/capture`, `POST /api/memories/:id/accept|reject|correct`, `GET /api/memories/:id/history`. `HOLOGRAPHIC_TEST_PROVIDER=1` (never in production) swaps in a deterministic model for tests.
+
+Where a retrieval component such as Hindsight could fit later: behind `server/retrieval.ts` (which pages to quote) and, separately, behind the capture step (which passages to propose from). Holographic's own records stay the source of truth either way; a replacement would only change how candidates and passages are found, not where they are stored or how they are reviewed.

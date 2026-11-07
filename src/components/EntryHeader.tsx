@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatStamp } from "../lib/format";
 import type { Entry } from "../lib/types";
 
 interface Props {
   entry: Entry;
   onDelete?: (id: string) => void;
+  /** Extra quiet actions, shown before Delete. */
+  children?: ReactNode;
 }
 
 /** Small line above an opened entry: what it is, when it was made, and a quiet delete. */
-export function EntryHeader({ entry, onDelete }: Props) {
+export function EntryHeader({ entry, onDelete, children }: Props) {
   const [confirming, setConfirming] = useState(false);
   const kind = entry.kind === "chat" ? "Chat" : "Saved";
 
@@ -33,9 +35,10 @@ export function EntryHeader({ entry, onDelete }: Props) {
           </>
         )}
       </p>
-      {!entry.sample && onDelete && (
+      {!entry.sample && (children || onDelete) && (
         <div className="entry-actions">
-          {confirming ? (
+          {children}
+          {!onDelete ? null : confirming ? (
             <>
               <span className="entry-confirm-text">Delete this {kind.toLowerCase()}?</span>
               <button type="button" className="text-button text-button-danger" onClick={() => onDelete(entry.id)}>

@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { ChatEntry, Entry, Library, MessageRecord, SourceRef } from "../../shared/entries.js";
+import type { ChatEntry, Entry, Library, MemoryRefLite, MessageRecord, SourceRef } from "../../shared/entries.js";
 import { getPool } from "./client.js";
 
 // All SQL for entries and messages lives here. Everything above this file
@@ -22,6 +22,7 @@ interface MessageRow {
   content: string;
   note: string | null;
   sources: SourceRef[] | null;
+  memory_refs: MemoryRefLite[] | null;
   created_at: Date;
 }
 
@@ -33,10 +34,11 @@ function toMessage(r: MessageRow): MessageRecord {
     createdAt: r.created_at.toISOString(),
     ...(r.note ? { note: r.note } : {}),
     ...(r.sources ? { sources: r.sources } : {}),
+    ...(r.memory_refs ? { memoryRefs: r.memory_refs } : {}),
   };
 }
 
-const MESSAGE_COLUMNS = "id, entry_id, seq, role, content, note, sources, created_at";
+const MESSAGE_COLUMNS = "id, entry_id, seq, role, content, note, sources, memory_refs, created_at";
 
 function assemble(entryRows: EntryRow[], messageRows: MessageRow[]): Entry[] {
   const byEntry = new Map<string, MessageRecord[]>();
@@ -78,8 +80,8 @@ async function insertEntry(client: pg.PoolClient, entry: Entry, importedAt: Date
   if (entry.kind === "chat") {
     for (const [seq, m] of entry.messages.entries()) {
       await client.query(
-        `insert into messages (id, entry_id, seq, role, content, note, sources, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [m.id, entry.id, seq, m.role, m.content, m.note ?? null, m.sources ? JSON.stringify(m.sources) : null, m.createdAt],
+        `insert into messages (id, entry_id, seq, role, content, note, sources, memory_refs, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [m.id, entry.id, seq, m.role, m.content, m.note ?? null, m.sources ? JSON.stringify(m.sources) : null, m.memoryRefs ? JSON.stringify(m.memoryRefs) : null, m.createdAt],
       );
     }
   }
@@ -114,7 +116,7 @@ export async function appendMessage(entryId: string, message: MessageRecord, poo
     if (dup.rows.length > 0) throw new ConflictError(`Message ${message.id} already exists`);
     const next = await client.query<{ seq: number }>("select coalesce(max(seq) + 1, 0) as seq from messages where entry_id = $1", [entryId]);
     await client.query(
-      `insert into messages (id, entry_id, seq, role, content, note, sources, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `insert into messages (id, entry_id, seq, role, content, note, sources, memory_refs, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         message.id,
         entryId,
@@ -123,6 +125,7 @@ export async function appendMessage(entryId: string, message: MessageRecord, poo
         message.content,
         message.note ?? null,
         message.sources ? JSON.stringify(message.sources) : null,
+        message.memoryRefs ? JSON.stringify(message.memoryRefs) : null,
         message.createdAt,
       ],
     );

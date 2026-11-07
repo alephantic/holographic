@@ -6,6 +6,9 @@ import { accessGranted, accessKeyRequired } from "./access.js";
 import { storageConfigured } from "./db/client.js";
 import { selectProvider } from "./providers.js";
 import { assembleContext, retrieve } from "./retrieval.js";
+import { DEFAULT_PROJECT, ensureProject, listMemories } from "./db/memories.js";
+import { assembleMemoryContext, citedRefs } from "./memory.js";
+import type { MemoryRef } from "../shared/memory.js";
 
 const SYSTEM_PROMPT =
   "You are the conversational side of Holographic, a composition studio for writing, design, music, " +
@@ -93,13 +96,23 @@ chatApp.post("/chat", async (c) => {
       // With studio storage, the saved pages are searched for every question and
       // the matches are quoted to the model; the reader sees which ones were used.
       let system = SYSTEM_PROMPT;
+      let memoryRefs: (MemoryRef & { label: string })[] = [];
       if (storageConfigured()) {
         const question = turns[turns.length - 1]!.content;
+        // Established project memory first (it frames the conversation), then the pages found for this question.
+        await ensureProject();
+        const memory = assembleMemoryContext((await listMemories(DEFAULT_PROJECT.id)).filter((m) => m.status === "accepted"));
+        memoryRefs = memory.refs;
         const context = assembleContext(await retrieve(question));
         await send({ type: "sources", sources: context.included });
-        system = `${SYSTEM_PROMPT}\n\n${context.text}`;
+        system = `${SYSTEM_PROMPT}\n\n${memory.text}\n\n${context.text}`;
       }
-      const result = await provider.reply(system, turns, (text) => send({ type: "text", text }));
+      let replyText = "";
+      const result = await provider.reply(system, turns, (text) => {
+        replyText += text;
+        return send({ type: "text", text });
+      });
+      if (storageConfigured()) await send({ type: "memories", memories: citedRefs(replyText, memoryRefs) });
       if (result.refusal) await send({ type: "error", code: "refusal", message: result.refusal });
       else await send({ type: "done" });
     } catch (error) {

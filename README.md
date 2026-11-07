@@ -37,6 +37,8 @@ Shared storage is optional. With `DATABASE_URL` set (a local Docker Postgres via
 
 With shared storage, each chat question is also searched against the saved entries; matching pages are quoted to the model and shown under the reply as clickable sources. How that works, and its limits, is in `db/README.md`.
 
+There is also a first, small project memory: "Remember this chat" proposes decisions and open questions from a conversation, each tied to the message that supports it; you accept, edit, or reject them, and only accepted ones are given to later chats, which cite them. Corrections keep history. See `db/README.md`.
+
 Two details worth knowing. A chat keeps every message, but only a recent window (at most 24 turns, 8,000 characters per message, 32,000 per request, set in `shared/limits.ts`) is sent with each new reply; the interface draws a line where that window begins. And the sidebar's Export writes all entries to a JSON file that Import can read back, matching entries by id so repeating an import adds nothing twice.
 
 Layout: `src/` is the client, `server/` the API, `shared/` the wire protocol both sides use, `api/` the Vercel entry point for the same API (with `vercel.json`), and `e2e/` the browser tests. Saved entries are a single versioned document (`src/lib/types.ts`) so the shape can grow to hold pages of *The Entrance Way* later. Sample entries are built in, labeled as samples, and never stored.

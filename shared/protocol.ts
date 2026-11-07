@@ -13,7 +13,7 @@ export interface ChatRequest {
 }
 
 export type StatusResponse = (
-  | { configured: true; provider: "openai" | "anthropic"; model: string }
+  | { configured: true; provider: "openai" | "anthropic" | "test"; model: string }
   | { configured: false; provider: null; model: null }
 ) & {
   /** True when chat and storage requests must carry an access key (x-holographic-key). */
@@ -26,11 +26,14 @@ export type StatusResponse = (
 export const ACCESS_HEADER = "x-holographic-key";
 
 import type { SourceRef } from "./entries";
+import type { MemoryRef } from "./memory";
 
 /** Newline-delimited JSON events streamed back from POST /api/chat. */
 export type ChatEvent =
   /** Sent before any text when saved pages were searched for this turn; `sources` may be empty. */
   | { type: "sources"; sources: SourceRef[] }
+  /** Sent after the reply text when project memory was available: the accepted memories the reply cited. */
+  | { type: "memories"; memories: MemoryRef[] }
   | { type: "text"; text: string }
   | { type: "done" }
   | { type: "error"; code: ChatErrorCode; message: string };

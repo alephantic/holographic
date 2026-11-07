@@ -19,6 +19,15 @@ export interface MessageRecord {
   note?: string;
   /** For assistant replies: which saved entries were consulted. An empty list means retrieval ran and found nothing. */
   sources?: SourceRef[];
+  /** For assistant replies: which accepted project memories the reply cited. */
+  memoryRefs?: MemoryRefLite[];
+}
+
+/** A cited project memory, as stored on a message. */
+export interface MemoryRefLite {
+  id: string;
+  kind: "decision" | "open";
+  text: string;
 }
 
 interface EntryBase {
@@ -78,7 +87,16 @@ export function isMessageRecord(value: unknown): value is MessageRecord {
   if (m.sources !== undefined) {
     if (!Array.isArray(m.sources) || m.sources.length > MAX_SOURCES_PER_MESSAGE || !m.sources.every(isSourceRef)) return false;
   }
+  if (m.memoryRefs !== undefined) {
+    if (!Array.isArray(m.memoryRefs) || m.memoryRefs.length > 50 || !m.memoryRefs.every(isMemoryRefLite)) return false;
+  }
   return true;
+}
+
+export function isMemoryRefLite(value: unknown): value is MemoryRefLite {
+  if (!value || typeof value !== "object") return false;
+  const r = value as Record<string, unknown>;
+  return typeof r.id === "string" && ID.test(r.id) && (r.kind === "decision" || r.kind === "open") && isText(r.text, 1_000);
 }
 
 export function isSourceRef(value: unknown): value is SourceRef {
@@ -119,6 +137,7 @@ export function cleanEntry(entry: Entry): Entry {
       createdAt: m.createdAt,
       ...(m.note ? { note: m.note } : {}),
       ...(m.sources ? { sources: m.sources.map((r) => ({ id: r.id, title: r.title, ...(r.page ? { page: r.page } : {}) })) } : {}),
+      ...(m.memoryRefs ? { memoryRefs: m.memoryRefs.map((r) => ({ id: r.id, kind: r.kind, text: r.text })) } : {}),
     })),
   };
 }
